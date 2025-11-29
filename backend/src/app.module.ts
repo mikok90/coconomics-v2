@@ -11,14 +11,11 @@ import { User, Portfolio, Asset, Position, PriceHistory, RebalanceHistory, Optim
     }),
     TypeOrmModule.forRoot({
       type: 'postgres',
-      host: process.env.DB_HOST || 'localhost',
-      port: parseInt(process.env.DB_PORT) || 5432,
-      username: process.env.DB_USER || 'postgres',
-      password: process.env.DB_PASSWORD || 'postgres',
-      database: process.env.DB_NAME || 'coconomics',
+      url: process.env.DATABASE_URL,
       entities: [User, Portfolio, Asset, Position, PriceHistory, RebalanceHistory, OptimizationResult],
-      synchronize: false,
+      synchronize: true, // Auto-create tables on first run
       logging: true,
+      ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false,
     }),
     PortfolioModule,
   ],
