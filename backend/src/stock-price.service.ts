@@ -29,7 +29,11 @@ export class StockPriceService {
         params: {
           interval: '1d',
           range: '1d'
-        }
+        },
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        },
+        timeout: 10000
       });
 
       const data = response.data.chart.result[0];
@@ -44,8 +48,8 @@ export class StockPriceService {
         previousClose: meta.previousClose,
         volume: quote.volume[quote.volume.length - 1] || 0
       };
-    } catch (error) {
-      console.error(`Error fetching quote for ${symbol}:`, error.message);
+    } catch (error: any) {
+      console.error(`Error fetching quote for ${symbol}:`, error.response?.data || error.message);
       throw new Error(`Failed to fetch quote for ${symbol}`);
     }
   }
@@ -75,24 +79,43 @@ export class StockPriceService {
   async getChartData(symbol: string, range: string = '1d'): Promise<ChartData> {
     try {
       const url = `${this.YAHOO_FINANCE_API}/v8/finance/chart/${symbol}`;
+      console.log(`Fetching chart from Yahoo Finance: ${url} with range ${range}`);
+
       const response = await axios.get(url, {
         params: {
           interval: this.getIntervalForRange(range),
           range: range
-        }
+        },
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        },
+        timeout: 10000
       });
+
+      console.log(`Yahoo Finance response status: ${response.status}`);
+
+      if (!response.data || !response.data.chart || !response.data.chart.result || response.data.chart.result.length === 0) {
+        console.warn(`No chart data in response for ${symbol}`);
+        return { timestamp: [], prices: [] };
+      }
 
       const data = response.data.chart.result[0];
       const timestamps = data.timestamp || [];
-      const prices = data.indicators.quote[0].close || [];
+      const prices = data.indicators?.quote?.[0]?.close || [];
+
+      console.log(`Successfully fetched ${prices.length} prices for ${symbol}`);
 
       return {
         timestamp: timestamps,
         prices: prices.filter((p: number) => p !== null)
       };
-    } catch (error) {
-      console.error(`Error fetching chart for ${symbol}:`, error.message);
-      throw new Error(`Failed to fetch chart for ${symbol}`);
+    } catch (error: any) {
+      console.error(`Error fetching chart for ${symbol}:`, error.response?.data || error.message);
+      // Return empty data instead of throwing - don't crash the server
+      return {
+        timestamp: [],
+        prices: []
+      };
     }
   }
 
