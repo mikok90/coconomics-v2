@@ -124,21 +124,30 @@ export default function PortfolioPage() {
     for (const position of positions) {
       try {
         const timeframe = selectedTimeframes[position.asset.symbol] || '1d';
+        console.log(`Fetching chart for ${position.asset.symbol} with range ${timeframe}`);
         const response = await axios.get(`${API_URL}/portfolio/stock/${position.asset.symbol}/chart`, {
           params: { range: timeframe }
         });
+        console.log(`Chart response for ${position.asset.symbol}:`, response.data);
+
         if (response.data && response.data.prices && response.data.prices.length > 0) {
+          const validPrices = response.data.prices.filter((p: number) => p !== null && p !== undefined);
+          const validTimestamps = response.data.timestamp || [];
+
+          console.log(`Valid data for ${position.asset.symbol}: ${validPrices.length} prices, ${validTimestamps.length} timestamps`);
+
           charts[position.asset.symbol] = {
-            prices: response.data.prices.filter((p: number) => p !== null && p !== undefined),
-            timestamps: response.data.timestamp || []
+            prices: validPrices,
+            timestamps: validTimestamps
           };
         } else {
-          console.log(`No chart data available for ${position.asset.symbol}`);
+          console.warn(`No chart data available for ${position.asset.symbol}`, response.data);
         }
       } catch (error: any) {
-        console.error(`Error loading chart for ${position.asset.symbol}:`, error.message);
+        console.error(`Error loading chart for ${position.asset.symbol}:`, error.response?.data || error.message);
       }
     }
+    console.log('All charts loaded:', Object.keys(charts));
     setMiniCharts(charts);
   };
 
@@ -399,8 +408,15 @@ export default function PortfolioPage() {
                     })}
                   </div>
 
+                  {/* Debug info */}
+                  {chartPrices.length === 0 && (
+                    <div className="text-xs text-gray-500 mb-2 text-center">
+                      Loading chart data...
+                    </div>
+                  )}
+
                   {/* Large Revolut-style Chart with Grid & Hover */}
-                  {chartPrices.length > 1 && chartTimestamps.length > 1 && (
+                  {chartPrices.length > 1 && chartTimestamps.length > 1 ? (
                     <div className="relative mb-4">
                       {/* Chart container */}
                       <div
@@ -685,6 +701,10 @@ export default function PortfolioPage() {
                           </>
                         )}
                       </div>
+                    </div>
+                  ) : chartPrices.length === 0 ? null : (
+                    <div className="text-xs text-gray-500 mb-2 text-center p-4 bg-zinc-800 rounded-xl">
+                      Chart unavailable - insufficient data
                     </div>
                   )}
 
