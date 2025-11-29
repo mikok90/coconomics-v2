@@ -13,9 +13,8 @@ import { User, Portfolio, Asset, Position, PriceHistory, RebalanceHistory, Optim
       type: 'postgres',
       url: process.env.DATABASE_URL,
       entities: [User, Portfolio, Asset, Position, PriceHistory, RebalanceHistory, OptimizationResult],
-      synchronize: true, // Auto-create tables on first run
+      synchronize: false,
       logging: true,
-      ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false,
     }),
     PortfolioModule,
   ],
