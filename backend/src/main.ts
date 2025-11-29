@@ -6,7 +6,7 @@ async function bootstrap() {
   
   // Enable CORS for frontend
   app.enableCors({
-    origin: true, // Allow all origins for now (Vercel domains)
+    origin: ['http://localhost:3000', 'https://coconomics-v2.vercel.app'],
     credentials: true,
   });
 
