@@ -127,12 +127,16 @@ export default function PortfolioPage() {
         const response = await axios.get(`${API_URL}/portfolio/stock/${position.asset.symbol}/chart`, {
           params: { range: timeframe }
         });
-        charts[position.asset.symbol] = {
-          prices: response.data.prices.filter((p: number) => p !== null),
-          timestamps: response.data.timestamp || []
-        };
-      } catch (error) {
-        console.error(`Error loading chart for ${position.asset.symbol}`);
+        if (response.data && response.data.prices && response.data.prices.length > 0) {
+          charts[position.asset.symbol] = {
+            prices: response.data.prices.filter((p: number) => p !== null && p !== undefined),
+            timestamps: response.data.timestamp || []
+          };
+        } else {
+          console.log(`No chart data available for ${position.asset.symbol}`);
+        }
+      } catch (error: any) {
+        console.error(`Error loading chart for ${position.asset.symbol}:`, error.message);
       }
     }
     setMiniCharts(charts);
@@ -246,7 +250,7 @@ export default function PortfolioPage() {
   };
 
   return (
-    <div className="min-h-screen bg-black text-white pb-24">
+    <div className="min-h-screen bg-black text-white pb-24 overflow-x-hidden w-full max-w-full">
       {/* Header */}
       <div className="px-6 pt-8 pb-4">
         <p className="text-gray-500 text-sm">Portfolio</p>
@@ -309,10 +313,16 @@ export default function PortfolioPage() {
         ) : (
           <div className="space-y-3">
             {positions.map((position) => {
-              const currentValue = position.quantity * position.currentPrice;
-              const costBasis = position.quantity * position.avgBuyPrice;
+              // Ensure all values are properly parsed as numbers
+              const quantity = parseFloat(position.quantity?.toString() || '0');
+              const currentPrice = parseFloat(position.currentPrice?.toString() || '0');
+              const avgBuyPrice = parseFloat(position.avgBuyPrice?.toString() || '0');
+
+              const currentValue = quantity * currentPrice;
+              const costBasis = quantity * avgBuyPrice;
               const profitLoss = currentValue - costBasis;
-              const profitLossPercent = (profitLoss / costBasis) * 100;
+              const profitLossPercent = costBasis > 0 ? (profitLoss / costBasis) * 100 : 0;
+
               const recommendation = recommendations[position.asset.symbol];
               const chartData = miniCharts[position.asset.symbol];
               const chartPrices = chartData?.prices || [];
@@ -349,13 +359,16 @@ export default function PortfolioPage() {
                   <div className="mb-4">
                     {/* Live stock price per share */}
                     <div className="text-sm text-gray-400 mb-1">
-                      €{parseFloat(position.currentPrice.toString()).toFixed(2)} per share
+                      €{currentPrice.toFixed(2)} per share
                     </div>
-                    {/* Total value - smaller */}
+                    {/* Total value */}
                     <div className="text-xl font-bold mb-1">{formatCurrency(currentValue)}</div>
-                    <div className={`text-base font-semibold ${profitLoss >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                      {profitLoss >= 0 ? '+' : ''}{formatCurrency(profitLoss)} ({profitLoss >= 0 ? '+' : ''}{profitLossPercent.toFixed(2)}%)
-                    </div>
+                    {/* Profit/Loss */}
+                    {costBasis > 0 && (
+                      <div className={`text-base font-semibold ${profitLoss >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                        {profitLoss >= 0 ? '+' : ''}{formatCurrency(profitLoss)} ({profitLoss >= 0 ? '+' : ''}{profitLossPercent.toFixed(2)}%)
+                      </div>
+                    )}
                   </div>
 
                   {/* Timeframe Buttons - Centered, spacious */}
@@ -387,7 +400,7 @@ export default function PortfolioPage() {
                   </div>
 
                   {/* Large Revolut-style Chart with Grid & Hover */}
-                  {chartPrices.length > 0 && (
+                  {chartPrices.length > 1 && chartTimestamps.length > 1 && (
                     <div className="relative mb-4">
                       {/* Chart container */}
                       <div
@@ -677,9 +690,9 @@ export default function PortfolioPage() {
 
                   {/* Bottom: Stats */}
                   <div className="flex justify-between text-xs text-gray-400 mb-3">
-                    <span>{position.quantity} shares</span>
-                    <span>Avg {formatCurrency(position.avgBuyPrice)}</span>
-                    <span>Now {formatCurrency(position.currentPrice)}</span>
+                    <span>{quantity.toFixed(2)} shares</span>
+                    <span>Avg €{avgBuyPrice.toFixed(2)}</span>
+                    <span>Now €{currentPrice.toFixed(2)}</span>
                   </div>
 
                   {/* REBALANCING ALGORITHMS */}
