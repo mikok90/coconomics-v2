@@ -13,7 +13,7 @@ import { User, Portfolio, Asset, Position, PriceHistory, RebalanceHistory, Optim
       type: 'postgres',
       url: process.env.DATABASE_URL,
       entities: [User, Portfolio, Asset, Position, PriceHistory, RebalanceHistory, OptimizationResult],
-      synchronize: false,
+      synchronize: true,
       logging: true,
     }),
     PortfolioModule,
