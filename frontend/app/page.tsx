@@ -389,8 +389,9 @@ export default function PortfolioPage() {
                   {chartPrices.length > 0 && (
                     <div className="relative mb-4">
                       {/* Chart container */}
-                      <div 
-                        className="h-48 rounded-xl overflow-hidden bg-black relative cursor-crosshair"
+                      <div
+                        className="h-48 w-full rounded-xl overflow-hidden bg-black relative touch-none"
+                        style={{ minHeight: '192px', WebkitTapHighlightColor: 'transparent' }}
                         onMouseMove={(e) => {
                           const rect = e.currentTarget.getBoundingClientRect();
                           const x = e.clientX - rect.left;
@@ -459,7 +460,7 @@ export default function PortfolioPage() {
                           setHoverData(prev => ({ ...prev, [position.asset.symbol]: null }));
                         }}
                       >
-                        <svg viewBox="0 0 400 180" className="w-full h-full" preserveAspectRatio="none">
+                        <svg viewBox="0 0 400 180" className="w-full h-full" preserveAspectRatio="none" style={{ display: 'block', width: '100%', height: '100%' }}>
                           <defs>
                             <linearGradient id={`g${position.id}`} x1="0%" y1="0%" x2="0%" y2="100%">
                               <stop offset="0%" stopColor="#f87171" stopOpacity="0.15"/>
