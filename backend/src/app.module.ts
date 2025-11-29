@@ -15,6 +15,9 @@ import { User, Portfolio, Asset, Position, PriceHistory, RebalanceHistory, Optim
       entities: [User, Portfolio, Asset, Position, PriceHistory, RebalanceHistory, OptimizationResult],
       synchronize: true,
       logging: true,
+      ssl: {
+        rejectUnauthorized: false,
+      },
     }),
     PortfolioModule,
   ],
