@@ -76,14 +76,33 @@ export class PortfolioService {
   ) {
     // Find or create asset
     let asset = await this.assetRepo.findOne({ where: { symbol: data.symbol } });
-    
+
     if (!asset) {
-      asset = this.assetRepo.create({
-        symbol: data.symbol,
-        name: data.symbol,
-        assetType: 'stock'
-      });
+      // Fetch live quote to get asset name
+      try {
+        const quote = await this.stockPriceService.getQuote(data.symbol);
+        asset = this.assetRepo.create({
+          symbol: data.symbol,
+          name: data.symbol,
+          assetType: 'stock'
+        });
+      } catch (error) {
+        asset = this.assetRepo.create({
+          symbol: data.symbol,
+          name: data.symbol,
+          assetType: 'stock'
+        });
+      }
       await this.assetRepo.save(asset);
+    }
+
+    // Fetch current live price
+    let currentPrice = data.avgBuyPrice;
+    try {
+      const quote = await this.stockPriceService.getQuote(data.symbol);
+      currentPrice = quote.price;
+    } catch (error) {
+      console.error(`Failed to fetch live price for ${data.symbol}:`, error.message);
     }
 
     // Check if position exists
@@ -98,40 +117,22 @@ export class PortfolioService {
       const oldAvg = parseFloat(position.avgBuyPrice.toString());
       const newQty = parseFloat(data.quantity.toString());
       const newAvg = parseFloat(data.avgBuyPrice.toString());
-      
-      console.log('BEFORE UPDATE:', {
-        oldQuantity: oldQty,
-        oldAvgPrice: oldAvg,
-        newQuantity: newQty,
-        newAvgPrice: newAvg
-      });
-      
+
       const totalCost = (oldQty * oldAvg) + (newQty * newAvg);
       const totalQuantity = oldQty + newQty;
-      
-      console.log('CALCULATION:', {
-        totalCost,
-        totalQuantity,
-        newAvgPrice: totalCost / totalQuantity
-      });
-      
+
       position.quantity = totalQuantity;
       position.avgBuyPrice = totalCost / totalQuantity;
-      // Keep existing currentPrice, don't override with avgBuyPrice
+      position.currentPrice = currentPrice; // Update with live price
       position.lastUpdated = new Date();
-      
-      console.log('AFTER UPDATE:', {
-        quantity: position.quantity,
-        avgBuyPrice: position.avgBuyPrice
-      });
     } else {
-      // Create new position
+      // Create new position with live price
       position = this.positionRepo.create({
         portfolioId,
         assetId: asset.id,
         quantity: data.quantity,
         avgBuyPrice: data.avgBuyPrice,
-        currentPrice: data.avgBuyPrice,
+        currentPrice: currentPrice, // Use live price
         lastUpdated: new Date()
       });
     }
@@ -139,7 +140,11 @@ export class PortfolioService {
     await this.positionRepo.save(position);
     await this.updatePortfolioWeights(portfolioId);
 
-    return position;
+    // Return position with asset info
+    return this.positionRepo.findOne({
+      where: { id: position.id },
+      relations: ['asset']
+    });
   }
 
   /**

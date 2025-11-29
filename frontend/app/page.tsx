@@ -73,9 +73,10 @@ export default function PortfolioPage() {
 
   const loadPortfolio = async () => {
     try {
-      const response = await axios.get(`${API_URL}/portfolio/${portfolioId}/positions`);
+      // Fetch positions with live prices
+      const response = await axios.get(`${API_URL}/portfolio/${portfolioId}/live-prices`);
       setPositions(response.data);
-      
+
       // Calculate total value from all positions
       const total = response.data.reduce((sum: number, pos: Position) => {
         return sum + (pos.quantity * pos.currentPrice);
