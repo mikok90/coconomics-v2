@@ -73,15 +73,26 @@ export default function PortfolioPage() {
 
   const loadPortfolio = async () => {
     try {
-      // Fetch positions with live prices
-      const response = await axios.get(`${API_URL}/portfolio/${portfolioId}/live-prices`);
-      setPositions(response.data);
+      // First try to fetch with live prices
+      try {
+        const response = await axios.get(`${API_URL}/portfolio/${portfolioId}/live-prices`);
+        setPositions(response.data);
 
-      // Calculate total value from all positions
-      const total = response.data.reduce((sum: number, pos: Position) => {
-        return sum + (pos.quantity * pos.currentPrice);
-      }, 0);
-      setTotalValue(total);
+        const total = response.data.reduce((sum: number, pos: Position) => {
+          return sum + (pos.quantity * pos.currentPrice);
+        }, 0);
+        setTotalValue(total);
+      } catch (liveError) {
+        console.warn('Live prices unavailable, loading cached prices');
+        // Fallback to regular positions if live prices fail
+        const response = await axios.get(`${API_URL}/portfolio/${portfolioId}/positions`);
+        setPositions(response.data);
+
+        const total = response.data.reduce((sum: number, pos: Position) => {
+          return sum + (pos.quantity * pos.currentPrice);
+        }, 0);
+        setTotalValue(total);
+      }
     } catch (error) {
       console.error('Error loading portfolio:', error);
     }
@@ -364,11 +375,18 @@ export default function PortfolioPage() {
                     </button>
                   </div>
 
+                  {/* Price Info Banner */}
+                  <div className="mb-3 p-2 bg-blue-900/20 border border-blue-700/30 rounded-lg">
+                    <div className="text-xs text-blue-300 text-center">
+                      💡 Prices shown are from when you added the stock. Live prices coming soon!
+                    </div>
+                  </div>
+
                   {/* Value and P/L */}
                   <div className="mb-4">
                     {/* Live stock price per share */}
                     <div className="text-sm text-gray-400 mb-1">
-                      €{currentPrice.toFixed(2)} per share
+                      €{currentPrice.toFixed(2)} per share (your entry price)
                     </div>
                     {/* Total value */}
                     <div className="text-xl font-bold mb-1">{formatCurrency(currentValue)}</div>
@@ -408,15 +426,13 @@ export default function PortfolioPage() {
                     })}
                   </div>
 
-                  {/* Debug info */}
-                  {chartPrices.length === 0 && (
-                    <div className="text-xs text-gray-500 mb-2 text-center">
-                      Loading chart data...
-                    </div>
-                  )}
+                  {/* Charts temporarily unavailable message */}
+                  <div className="text-xs text-gray-500 mb-4 text-center p-3 bg-zinc-800/50 rounded-lg border border-zinc-700">
+                    📊 Live charts temporarily unavailable due to API limits
+                  </div>
 
                   {/* Large Revolut-style Chart with Grid & Hover */}
-                  {chartPrices.length > 1 && chartTimestamps.length > 1 ? (
+                  {false && chartPrices.length > 1 && chartTimestamps.length > 1 ? (
                     <div className="relative mb-4">
                       {/* Chart container */}
                       <div
