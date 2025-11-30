@@ -73,26 +73,14 @@ export default function PortfolioPage() {
 
   const loadPortfolio = async () => {
     try {
-      // First try to fetch with live prices
-      try {
-        const response = await axios.get(`${API_URL}/portfolio/${portfolioId}/live-prices`);
-        setPositions(response.data);
+      // Fetch positions with live prices from Finnhub
+      const response = await axios.get(`${API_URL}/portfolio/${portfolioId}/live-prices`);
+      setPositions(response.data);
 
-        const total = response.data.reduce((sum: number, pos: Position) => {
-          return sum + (pos.quantity * pos.currentPrice);
-        }, 0);
-        setTotalValue(total);
-      } catch (liveError) {
-        console.warn('Live prices unavailable, loading cached prices');
-        // Fallback to regular positions if live prices fail
-        const response = await axios.get(`${API_URL}/portfolio/${portfolioId}/positions`);
-        setPositions(response.data);
-
-        const total = response.data.reduce((sum: number, pos: Position) => {
-          return sum + (pos.quantity * pos.currentPrice);
-        }, 0);
-        setTotalValue(total);
-      }
+      const total = response.data.reduce((sum: number, pos: Position) => {
+        return sum + (pos.quantity * pos.currentPrice);
+      }, 0);
+      setTotalValue(total);
     } catch (error) {
       console.error('Error loading portfolio:', error);
     }
@@ -135,30 +123,23 @@ export default function PortfolioPage() {
     for (const position of positions) {
       try {
         const timeframe = selectedTimeframes[position.asset.symbol] || '1d';
-        console.log(`Fetching chart for ${position.asset.symbol} with range ${timeframe}`);
         const response = await axios.get(`${API_URL}/portfolio/stock/${position.asset.symbol}/chart`, {
           params: { range: timeframe }
         });
-        console.log(`Chart response for ${position.asset.symbol}:`, response.data);
 
         if (response.data && response.data.prices && response.data.prices.length > 0) {
           const validPrices = response.data.prices.filter((p: number) => p !== null && p !== undefined);
           const validTimestamps = response.data.timestamp || [];
 
-          console.log(`Valid data for ${position.asset.symbol}: ${validPrices.length} prices, ${validTimestamps.length} timestamps`);
-
           charts[position.asset.symbol] = {
             prices: validPrices,
             timestamps: validTimestamps
           };
-        } else {
-          console.warn(`No chart data available for ${position.asset.symbol}`, response.data);
         }
       } catch (error: any) {
-        console.error(`Error loading chart for ${position.asset.symbol}:`, error.response?.data || error.message);
+        console.error(`Error loading chart for ${position.asset.symbol}`);
       }
     }
-    console.log('All charts loaded:', Object.keys(charts));
     setMiniCharts(charts);
   };
 
@@ -375,18 +356,11 @@ export default function PortfolioPage() {
                     </button>
                   </div>
 
-                  {/* Price Info Banner */}
-                  <div className="mb-3 p-2 bg-blue-900/20 border border-blue-700/30 rounded-lg">
-                    <div className="text-xs text-blue-300 text-center">
-                      💡 Prices shown are from when you added the stock. Live prices coming soon!
-                    </div>
-                  </div>
-
                   {/* Value and P/L */}
                   <div className="mb-4">
                     {/* Live stock price per share */}
                     <div className="text-sm text-gray-400 mb-1">
-                      €{currentPrice.toFixed(2)} per share (your entry price)
+                      €{currentPrice.toFixed(2)} per share
                     </div>
                     {/* Total value */}
                     <div className="text-xl font-bold mb-1">{formatCurrency(currentValue)}</div>
@@ -426,13 +400,8 @@ export default function PortfolioPage() {
                     })}
                   </div>
 
-                  {/* Charts temporarily unavailable message */}
-                  <div className="text-xs text-gray-500 mb-4 text-center p-3 bg-zinc-800/50 rounded-lg border border-zinc-700">
-                    📊 Live charts temporarily unavailable due to API limits
-                  </div>
-
                   {/* Large Revolut-style Chart with Grid & Hover */}
-                  {false && chartPrices.length > 1 && chartTimestamps.length > 1 ? (
+                  {chartPrices.length > 1 && chartTimestamps.length > 1 ? (
                     <div className="relative mb-4">
                       {/* Chart container */}
                       <div

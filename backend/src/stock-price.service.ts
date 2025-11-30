@@ -17,36 +17,46 @@ export interface ChartData {
 
 @Injectable()
 export class StockPriceService {
-  private readonly YAHOO_FINANCE_API = 'https://query1.finance.yahoo.com';
+  private readonly FINNHUB_API_KEY = process.env.FINNHUB_API_KEY;
+  private readonly FINNHUB_API = 'https://finnhub.io/api/v1';
 
   /**
-   * Get real-time stock quote with volume
+   * Get real-time stock quote with volume using Finnhub
    */
   async getQuote(symbol: string): Promise<StockQuote> {
     try {
-      const url = `${this.YAHOO_FINANCE_API}/v8/finance/chart/${symbol}`;
+      if (!this.FINNHUB_API_KEY) {
+        throw new Error('FINNHUB_API_KEY not configured');
+      }
+
+      const url = `${this.FINNHUB_API}/quote`;
+      console.log(`Fetching quote for ${symbol} from Finnhub`);
+
       const response = await axios.get(url, {
         params: {
-          interval: '1d',
-          range: '1d'
-        },
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+          symbol: symbol,
+          token: this.FINNHUB_API_KEY
         },
         timeout: 10000
       });
 
-      const data = response.data.chart.result[0];
-      const meta = data.meta;
-      const quote = data.indicators.quote[0];
+      const data = response.data;
+
+      // Finnhub response: {c: current, pc: previous close, h: high, l: low, o: open, t: timestamp}
+      const currentPrice = data.c;
+      const previousClose = data.pc;
+      const change = currentPrice - previousClose;
+      const changePercent = (change / previousClose) * 100;
+
+      console.log(`Successfully fetched quote for ${symbol}: $${currentPrice}`);
 
       return {
         symbol: symbol,
-        price: meta.regularMarketPrice,
-        change: meta.regularMarketPrice - meta.previousClose,
-        changePercent: ((meta.regularMarketPrice - meta.previousClose) / meta.previousClose) * 100,
-        previousClose: meta.previousClose,
-        volume: quote.volume[quote.volume.length - 1] || 0
+        price: currentPrice,
+        change: change,
+        changePercent: changePercent,
+        previousClose: previousClose,
+        volume: 0 // Finnhub quote endpoint doesn't include volume
       };
     } catch (error: any) {
       console.error(`Error fetching quote for ${symbol}:`, error.response?.data || error.message);
@@ -74,40 +84,46 @@ export class StockPriceService {
   }
 
   /**
-   * Get historical chart data
+   * Get historical chart data using Finnhub
    */
   async getChartData(symbol: string, range: string = '1d'): Promise<ChartData> {
     try {
-      const url = `${this.YAHOO_FINANCE_API}/v8/finance/chart/${symbol}`;
-      console.log(`Fetching chart from Yahoo Finance: ${url} with range ${range}`);
+      if (!this.FINNHUB_API_KEY) {
+        throw new Error('FINNHUB_API_KEY not configured');
+      }
+
+      const url = `${this.FINNHUB_API}/stock/candle`;
+      const { resolution, from, to } = this.getTimeRangeForFinnhub(range);
+
+      console.log(`Fetching chart from Finnhub: ${symbol}, range: ${range}, resolution: ${resolution}`);
 
       const response = await axios.get(url, {
         params: {
-          interval: this.getIntervalForRange(range),
-          range: range
-        },
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+          symbol: symbol,
+          resolution: resolution,
+          from: from,
+          to: to,
+          token: this.FINNHUB_API_KEY
         },
         timeout: 10000
       });
 
-      console.log(`Yahoo Finance response status: ${response.status}`);
+      console.log(`Finnhub response status: ${response.status}`);
 
-      if (!response.data || !response.data.chart || !response.data.chart.result || response.data.chart.result.length === 0) {
-        console.warn(`No chart data in response for ${symbol}`);
+      if (!response.data || response.data.s === 'no_data' || !response.data.c) {
+        console.warn(`No chart data available for ${symbol}`);
         return { timestamp: [], prices: [] };
       }
 
-      const data = response.data.chart.result[0];
-      const timestamps = data.timestamp || [];
-      const prices = data.indicators?.quote?.[0]?.close || [];
+      // Finnhub returns: {c: [close prices], t: [timestamps], o: [open], h: [high], l: [low], v: [volume], s: status}
+      const timestamps = response.data.t || [];
+      const prices = response.data.c || [];
 
       console.log(`Successfully fetched ${prices.length} prices for ${symbol}`);
 
       return {
         timestamp: timestamps,
-        prices: prices.filter((p: number) => p !== null)
+        prices: prices.filter((p: number) => p !== null && p !== undefined)
       };
     } catch (error: any) {
       console.error(`Error fetching chart for ${symbol}:`, error.response?.data || error.message);
@@ -117,6 +133,51 @@ export class StockPriceService {
         prices: []
       };
     }
+  }
+
+  /**
+   * Convert range string to Finnhub resolution and timestamps
+   */
+  private getTimeRangeForFinnhub(range: string): { resolution: string; from: number; to: number } {
+    const now = Math.floor(Date.now() / 1000); // Current time in seconds
+    let from: number;
+    let resolution: string;
+
+    switch (range) {
+      case '1d':
+        from = now - 86400; // 1 day ago
+        resolution = '5'; // 5 minute candles
+        break;
+      case '5d':
+        from = now - (5 * 86400); // 5 days ago
+        resolution = '15'; // 15 minute candles
+        break;
+      case '1mo':
+        from = now - (30 * 86400); // 30 days ago
+        resolution = 'D'; // Daily candles
+        break;
+      case '3mo':
+        from = now - (90 * 86400); // 90 days ago
+        resolution = 'D'; // Daily candles
+        break;
+      case '6mo':
+        from = now - (180 * 86400); // 180 days ago
+        resolution = 'D'; // Daily candles
+        break;
+      case '1y':
+        from = now - (365 * 86400); // 365 days ago
+        resolution = 'W'; // Weekly candles
+        break;
+      case '5y':
+        from = now - (5 * 365 * 86400); // 5 years ago
+        resolution = 'M'; // Monthly candles
+        break;
+      default:
+        from = now - 86400;
+        resolution = '5';
+    }
+
+    return { resolution, from, to: now };
   }
 
   /**
