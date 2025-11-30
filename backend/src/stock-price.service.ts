@@ -17,7 +17,7 @@ export interface ChartData {
 
 @Injectable()
 export class StockPriceService {
-  private readonly FINNHUB_API_KEY = process.env.FINNHUB_API_KEY;
+  private readonly FINNHUB_API_KEY = process.env.FINNHUB_API_KEY || 'd4lpiu1r01qr851psmh0d4lpiu1r01qr851psmhg';
   private readonly FINNHUB_API = 'https://finnhub.io/api/v1';
 
   /**
