@@ -71,9 +71,9 @@ const getSectorFromSymbol = (symbol: string): string => {
     'TJX': 'Consumer', 'DG': 'Consumer', 'ROST': 'Consumer', 'BBY': 'Consumer', 'YUM': 'Consumer',
     'PG': 'Consumer', 'KO': 'Consumer', 'PEP': 'Consumer', 'PM': 'Consumer', 'MO': 'Consumer',
     'CL': 'Consumer', 'KMB': 'Consumer', 'GIS': 'Consumer', 'K': 'Consumer', 'HSY': 'Consumer',
-    'MDLZ': 'Consumer', 'STZ': 'Consumer', 'TAP': 'Consumer', 'DIS': 'Consumer', 'CMCSA': 'Consumer',
-    'NFLX': 'Consumer', 'GM': 'Consumer', 'F': 'Consumer', 'RACE': 'Consumer', 'LCID': 'Consumer',
-    'RIVN': 'Consumer', 'NIO': 'Consumer', 'XPEV': 'Consumer', 'LI': 'Consumer', 'BABA': 'Consumer',
+    'MDLZ': 'Consumer', 'STZ': 'Consumer', 'TAP': 'Consumer', 'GM': 'Consumer', 'F': 'Consumer',
+    'RACE': 'Consumer', 'LCID': 'Consumer', 'RIVN': 'Consumer', 'NIO': 'Consumer', 'XPEV': 'Consumer',
+    'LI': 'Consumer', 'BABA': 'Consumer',
 
     // Energy - Oil, Gas, Renewables
     'XOM': 'Energy', 'CVX': 'Energy', 'COP': 'Energy', 'SLB': 'Energy', 'EOG': 'Energy',
@@ -85,7 +85,7 @@ const getSectorFromSymbol = (symbol: string): string => {
     'BA': 'Industrial', 'HON': 'Industrial', 'UPS': 'Industrial', 'CAT': 'Industrial', 'GE': 'Industrial',
     'MMM': 'Industrial', 'LMT': 'Industrial', 'RTX': 'Industrial', 'GD': 'Industrial', 'NOC': 'Industrial',
     'LHX': 'Industrial', 'DE': 'Industrial', 'EMR': 'Industrial', 'ETN': 'Industrial', 'ITW': 'Industrial',
-    'PH': 'Industrial', 'CMI': 'Industrial', 'FDX': 'Industrial', 'UBER': 'Industrial', 'LYFT': 'Industrial',
+    'PH': 'Industrial', 'CMI': 'Industrial', 'FDX': 'Industrial', 'LYFT': 'Industrial',
     'DAL': 'Industrial', 'UAL': 'Industrial', 'AAL': 'Industrial', 'LUV': 'Industrial', 'JBLU': 'Industrial',
 
     // Materials - Chemicals, Mining, Steel
