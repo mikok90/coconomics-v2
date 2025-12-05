@@ -216,10 +216,10 @@ Professional portfolio management application with Markowitz optimization, real-
 - ✅ PWA with custom "C" logo
 - ✅ All deployed to Production
 
-### What Needs to Be Added (Next Session):
-- ⏳ Sector Allocation Pie Chart
-- ⏳ Portfolio Performance Chart (over time)
-- ⏳ Loading Spinners (visual feedback)
+### Recently Added (2025-12-05 Evening):
+- ✅ Sector Allocation Pie Chart - WORKING
+- ✅ Portfolio Performance Chart - WORKING
+- ⏳ Loading Spinners - Component exists but not integrated
 
 ### How to Add Features Without Breaking:
 1. Read this file first
