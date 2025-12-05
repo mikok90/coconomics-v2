@@ -60,9 +60,9 @@ export default function PortfolioPerformanceChart({ token }: PortfolioPerformanc
   };
 
   const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('el-GR', {
+    return new Intl.NumberFormat('en-US', {
       style: 'currency',
-      currency: 'EUR',
+      currency: 'USD',
       minimumFractionDigits: 0,
       maximumFractionDigits: 0
     }).format(value);
@@ -99,7 +99,7 @@ export default function PortfolioPerformanceChart({ token }: PortfolioPerformanc
       <div className="flex justify-between items-start mb-6">
         <div>
           <h3 className="text-xl font-bold mb-2">Portfolio Performance</h3>
-          {performanceData.length > 0 && (
+          {performanceData.length > 1 && (
             <div className="flex items-baseline gap-3">
               <span className={`text-2xl font-bold ${change.amount >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                 {change.amount >= 0 ? '+' : ''}{formatCurrency(change.amount)}
