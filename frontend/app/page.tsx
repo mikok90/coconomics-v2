@@ -4,10 +4,6 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useAuth } from './auth-context';
 import { useRouter } from 'next/navigation';
-import LoadingSpinner, { FullPageLoader, InlineLoader } from './components/LoadingSpinner';
-import TransactionHistory from './components/TransactionHistory';
-import PortfolioPerformanceChart from './components/PortfolioPerformanceChart';
-import SectorAllocationChart from './components/SectorAllocationChart';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
@@ -19,6 +15,34 @@ interface Position {
   currentPrice: number;
   currentWeight: number;
   targetWeight: number;
+}
+
+interface Portfolio {
+  id: number;
+  cashBalance: number;
+  totalDeposits: number;
+  totalWithdrawals: number;
+  totalValue: number;
+}
+
+interface Transaction {
+  id: number;
+  type: string;
+  amount: number;
+  symbol?: string;
+  quantity?: number;
+  price?: number;
+  cashBalanceAfter: number;
+  notes?: string;
+  createdAt: string;
+}
+
+interface RuleOf40 {
+  revenueGrowth: number;
+  profitMargin: number;
+  ruleOf40Score: number;
+  rating: string;
+  description: string;
 }
 
 interface RebalanceAction {
@@ -61,21 +85,40 @@ export default function PortfolioPage() {
 
   const [portfolioId] = useState(1);
   const [positions, setPositions] = useState<Position[]>([]);
+  const [portfolio, setPortfolio] = useState<Portfolio | null>(null);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [rebalanceActions, setRebalanceActions] = useState<RebalanceAction[]>([]);
   const [totalValue, setTotalValue] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [initialLoading, setInitialLoading] = useState(true);
   const [showAddPosition, setShowAddPosition] = useState(false);
-  const [showSellPosition, setShowSellPosition] = useState(false);
-  const [showTransactionHistory, setShowTransactionHistory] = useState(false);
+  const [showCashModal, setShowCashModal] = useState(false);
+  const [showTransactions, setShowTransactions] = useState(false);
+  const [showSellModal, setShowSellModal] = useState(false);
   const [selectedPosition, setSelectedPosition] = useState<Position | null>(null);
+  const [sellQuantity, setSellQuantity] = useState('');
+  const [cashModalType, setCashModalType] = useState<'deposit' | 'withdraw'>('deposit');
   const [optimization, setOptimization] = useState<any>(null);
   const [recommendations, setRecommendations] = useState<Record<string, any>>({});
   const [miniCharts, setMiniCharts] = useState<MiniChart>({});
   const [selectedTimeframes, setSelectedTimeframes] = useState<Record<string, Timeframe>>({});
   const [hoverData, setHoverData] = useState<HoverData>({});
   const [rebalancingAlgos, setRebalancingAlgos] = useState<Record<string, any>>({});
-  const [ruleOf40Data, setRuleOf40Data] = useState<Record<string, any>>({});
+  const [ruleOf40Data, setRuleOf40Data] = useState<Record<string, RuleOf40>>({});
+
+  // Custom modal state
+  const [confirmModal, setConfirmModal] = useState<{
+    show: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  }>({ show: false, title: '', message: '', onConfirm: () => {} });
+
+  const [alertModal, setAlertModal] = useState<{
+    show: boolean;
+    title: string;
+    message: string;
+    type: 'success' | 'error' | 'info';
+  }>({ show: false, title: '', message: '', type: 'info' });
 
   // Form state
   const [newPosition, setNewPosition] = useState({
@@ -84,18 +127,27 @@ export default function PortfolioPage() {
     avgBuyPrice: ''
   });
 
-  const [sellQuantity, setSellQuantity] = useState('');
+  const [cashAmount, setCashAmount] = useState('');
+
+  // Helper functions for custom modals
+  const showConfirm = (title: string, message: string, onConfirm: () => void) => {
+    setConfirmModal({ show: true, title, message, onConfirm });
+  };
+
+  const showAlert = (title: string, message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setAlertModal({ show: true, title, message, type });
+  };
 
   useEffect(() => {
-    // Only load portfolio if authenticated and token is available
-    if (isAuthenticated && token) {
+    // Only load portfolio data after authentication is confirmed
+    if (!authLoading && isAuthenticated && token) {
       loadPortfolio();
       const interval = setInterval(() => {
         updateLivePrices();
       }, 30000);
       return () => clearInterval(interval);
     }
-  }, [isAuthenticated, token]);
+  }, [authLoading, isAuthenticated, token]);
 
   useEffect(() => {
     if (positions.length > 0) {
@@ -106,18 +158,74 @@ export default function PortfolioPage() {
 
   const loadPortfolio = async () => {
     try {
-      // Fetch positions with live prices from Finnhub
-      const response = await axios.get(`${API_URL}/portfolio/me/live-prices`, getAuthHeaders());
-      setPositions(response.data);
+      // Load portfolio data (includes cash balance)
+      const portfolioResponse = await axios.get(`${API_URL}/portfolio/me`, getAuthHeaders());
+      setPortfolio(portfolioResponse.data);
 
-      const total = response.data.reduce((sum: number, pos: Position) => {
+      // Load positions
+      const positionsResponse = await axios.get(`${API_URL}/portfolio/me/positions`, getAuthHeaders());
+      setPositions(positionsResponse.data);
+
+      // Calculate total value from all positions
+      const total = positionsResponse.data.reduce((sum: number, pos: Position) => {
         return sum + (pos.quantity * pos.currentPrice);
       }, 0);
       setTotalValue(total);
     } catch (error) {
       console.error('Error loading portfolio:', error);
+    }
+  };
+
+  const loadTransactions = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/portfolio/me/transactions`, getAuthHeaders());
+      setTransactions(response.data);
+    } catch (error) {
+      console.error('Error loading transactions:', error);
+    }
+  };
+
+  const depositCash = async () => {
+    const amount = parseFloat(cashAmount);
+    if (!amount || amount <= 0) {
+      showAlert('Invalid Amount', 'Please enter a valid amount', 'error');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await axios.post(`${API_URL}/portfolio/me/deposit`, { amount }, getAuthHeaders());
+      setCashAmount('');
+      setShowCashModal(false);
+      await loadPortfolio();
+      await loadTransactions();
+    } catch (error: any) {
+      console.error('Error depositing cash:', error);
+      showAlert('Error', error.response?.data?.message || 'Error depositing cash', 'error');
     } finally {
-      setInitialLoading(false);
+      setLoading(false);
+    }
+  };
+
+  const withdrawCash = async () => {
+    const amount = parseFloat(cashAmount);
+    if (!amount || amount <= 0) {
+      showAlert('Invalid Amount', 'Please enter a valid amount', 'error');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await axios.post(`${API_URL}/portfolio/me/withdraw`, { amount }, getAuthHeaders());
+      setCashAmount('');
+      setShowCashModal(false);
+      await loadPortfolio();
+      await loadTransactions();
+    } catch (error: any) {
+      console.error('Error withdrawing cash:', error);
+      showAlert('Error', error.response?.data?.message || 'Error withdrawing cash', 'error');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -139,19 +247,23 @@ export default function PortfolioPage() {
   const loadRecommendations = async () => {
     const recs: Record<string, any> = {};
     const algos: Record<string, any> = {};
-    const ruleOf40: Record<string, any> = {};
+    const ruleOf40: Record<string, RuleOf40> = {};
 
     for (const position of positions) {
       try {
         // Load rebalancing algorithms
         const rebalancingResponse = await axios.get(`${API_URL}/portfolio/position/${position.id}/rebalancing`, getAuthHeaders());
         algos[position.asset.symbol] = rebalancingResponse.data;
+      } catch (error) {
+        console.error(`Error loading algorithms for ${position.asset.symbol}`);
+      }
 
+      try {
         // Load Rule of 40 data
         const ruleOf40Response = await axios.get(`${API_URL}/portfolio/stock/${position.asset.symbol}/rule-of-40`, getAuthHeaders());
         ruleOf40[position.asset.symbol] = ruleOf40Response.data;
       } catch (error) {
-        console.error(`Error loading algorithms for ${position.asset.symbol}`);
+        console.error(`Error loading Rule of 40 for ${position.asset.symbol}`);
       }
     }
 
@@ -168,17 +280,11 @@ export default function PortfolioPage() {
           params: { range: timeframe },
           ...getAuthHeaders()
         });
-
-        if (response.data && response.data.prices && response.data.prices.length > 0) {
-          const validPrices = response.data.prices.filter((p: number) => p !== null && p !== undefined);
-          const validTimestamps = response.data.timestamp || [];
-
-          charts[position.asset.symbol] = {
-            prices: validPrices,
-            timestamps: validTimestamps
-          };
-        }
-      } catch (error: any) {
+        charts[position.asset.symbol] = {
+          prices: response.data.prices.filter((p: number) => p !== null),
+          timestamps: response.data.timestamp || []
+        };
+      } catch (error) {
         console.error(`Error loading chart for ${position.asset.symbol}`);
       }
     }
@@ -206,7 +312,7 @@ export default function PortfolioPage() {
 
   const addPosition = async () => {
     if (!newPosition.symbol || !newPosition.quantity || !newPosition.avgBuyPrice) {
-      alert('Please fill all fields');
+      showAlert('Missing Information', 'Please fill all fields', 'error');
       return;
     }
 
@@ -221,60 +327,71 @@ export default function PortfolioPage() {
       setNewPosition({ symbol: '', quantity: '', avgBuyPrice: '' });
       setShowAddPosition(false);
       await loadPortfolio();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error adding position:', error);
-      alert('Error adding position');
+      const errorMessage = error.response?.data?.message || error.message || 'Error adding position';
+      showAlert('Error', errorMessage, 'error');
     } finally {
       setLoading(false);
     }
   };
 
-  const openSellModal = (position: Position) => {
-    setSelectedPosition(position);
-    setSellQuantity('');
-    setShowSellPosition(true);
-  };
-
   const sellShares = async () => {
-    if (!selectedPosition || !sellQuantity) {
-      alert('Please enter quantity to sell');
-      return;
-    }
-
-    const quantityToSell = parseFloat(sellQuantity);
-
-    if (quantityToSell <= 0) {
-      alert('Quantity must be greater than 0');
-      return;
-    }
-
-    if (quantityToSell > selectedPosition.quantity) {
-      alert(`You only have ${selectedPosition.quantity} shares`);
+    if (!selectedPosition || !sellQuantity || parseFloat(sellQuantity) <= 0) {
+      showAlert('Invalid Quantity', 'Please enter a valid quantity', 'error');
       return;
     }
 
     setLoading(true);
     try {
-      // If selling all shares, delete the position entirely
-      if (quantityToSell === selectedPosition.quantity) {
-        await axios.delete(`${API_URL}/portfolio/position/${selectedPosition.id}`, getAuthHeaders());
-      } else {
-        // Otherwise, reduce the quantity
-        await axios.post(`${API_URL}/portfolio/position/${selectedPosition.id}/sell`, {
-          quantity: quantityToSell
-        }, getAuthHeaders());
-      }
+      await axios.post(`${API_URL}/portfolio/position/${selectedPosition.id}/sell`, {
+        quantity: parseFloat(sellQuantity)
+      }, getAuthHeaders());
 
-      setShowSellPosition(false);
       setSellQuantity('');
+      setShowSellModal(false);
       setSelectedPosition(null);
       await loadPortfolio();
-    } catch (error) {
+      await loadTransactions();
+    } catch (error: any) {
       console.error('Error selling shares:', error);
-      alert('Error selling shares');
+      const errorMessage = error.response?.data?.message || error.message || 'Error selling shares';
+      showAlert('Error', errorMessage, 'error');
     } finally {
       setLoading(false);
     }
+  };
+
+  const deletePosition = (positionId: number) => {
+    showConfirm(
+      'Remove Position',
+      'Remove this position from portfolio?',
+      async () => {
+        try {
+          await axios.delete(`${API_URL}/portfolio/position/${positionId}`, getAuthHeaders());
+          await loadPortfolio();
+        } catch (error) {
+          console.error('Error deleting position:', error);
+          showAlert('Error', 'Error removing position', 'error');
+        }
+      }
+    );
+  };
+
+  const deleteAllTransactions = () => {
+    showConfirm(
+      'Delete All History',
+      'Are you sure you want to delete all transaction history? This action cannot be undone.',
+      async () => {
+        try {
+          await axios.delete(`${API_URL}/portfolio/me/transactions`, getAuthHeaders());
+          await loadTransactions();
+        } catch (error) {
+          console.error('Error deleting transactions:', error);
+          showAlert('Error', 'Error deleting transaction history', 'error');
+        }
+      }
+    );
   };
 
   const runOptimization = async () => {
@@ -283,13 +400,13 @@ export default function PortfolioPage() {
       const response = await axios.post(`${API_URL}/portfolio/me/optimize`, {
         riskFreeRate: 0.02
       }, getAuthHeaders());
-      
+
       setOptimization(response.data.optimization);
       setPositions(response.data.positions);
-      alert('Optimization complete!');
+      showAlert('Success', 'Optimization complete!', 'success');
     } catch (error) {
       console.error('Error optimizing:', error);
-      alert('Error running optimization');
+      showAlert('Error', 'Error running optimization', 'error');
     } finally {
       setLoading(false);
     }
@@ -302,16 +419,16 @@ export default function PortfolioPage() {
       setRebalanceActions(response.data);
     } catch (error: any) {
       console.error('Error calculating rebalancing:', error);
-      alert(error.response?.data?.message || 'Error calculating rebalancing');
+      showAlert('Error', error.response?.data?.message || 'Error calculating rebalancing', 'error');
     } finally {
       setLoading(false);
     }
   };
 
   const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('el-GR', {
+    return new Intl.NumberFormat('en-US', {
       style: 'currency',
-      currency: 'EUR'
+      currency: 'USD'
     }).format(value);
   };
 
@@ -329,7 +446,11 @@ export default function PortfolioPage() {
 
   // Show loading while checking authentication
   if (authLoading) {
-    return <FullPageLoader />;
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="text-white text-lg">Loading...</div>
+      </div>
+    );
   }
 
   // Don't render if not authenticated (will redirect)
@@ -338,57 +459,80 @@ export default function PortfolioPage() {
   }
 
   return (
-    <div className="min-h-screen bg-black text-white pb-24 overflow-x-hidden w-full max-w-full">
-      {/* Header */}
-      <div className="px-6 pt-8 pb-4">
-        <div className="flex justify-between items-center">
-          <div>
-            <p className="text-gray-500 text-sm">Portfolio</p>
-            <h1 className="text-2xl font-semibold mt-1">Coconomics</h1>
-          </div>
-          <div className="flex gap-2">
-            <button
-              onClick={() => setShowTransactionHistory(true)}
-              className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 border border-white/10 rounded-xl text-sm font-medium transition-colors"
-            >
-              History
-            </button>
-            <button
-              onClick={logout}
-              className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 border border-white/10 rounded-xl text-sm font-medium transition-colors"
-            >
-              Logout
-            </button>
-          </div>
+    <div className="min-h-screen bg-black text-white pb-24 overflow-x-hidden max-w-full">
+      {/* Header with Logout Button */}
+      <div className="px-6 pt-6 pb-2 flex justify-between items-center">
+        <div>
+          <h1 className="text-xl font-semibold text-white">Coconomics</h1>
         </div>
+        <button
+          onClick={logout}
+          className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 border border-white/10 rounded-xl text-sm font-medium transition-colors"
+        >
+          Logout
+        </button>
       </div>
 
       {/* Total Value Card */}
-      <div className="px-6 pb-6">
+      <div className="px-6 pt-6 pb-6">
         <div className="bg-gradient-to-br from-cyan-500 to-blue-600 rounded-3xl p-8 shadow-2xl">
-          <p className="text-cyan-100 text-sm mb-2 opacity-90">Current Value</p>
-          <h2 className="text-5xl font-bold tracking-tight">{formatCurrency(totalValue)}</h2>
-          <div className="mt-6 pt-6 border-t border-white/20">
+          <p className="text-cyan-100 text-sm mb-2 opacity-90">Portfolio Value</p>
+          <h2 className="text-5xl font-bold tracking-tight">
+            {formatCurrency((totalValue || 0) + (portfolio?.cashBalance ? parseFloat(portfolio.cashBalance.toString()) : 0))}
+          </h2>
+
+          <div className="mt-6 pt-6 border-t border-white/20 space-y-3">
+            {/* Cash Balance */}
             <div className="flex justify-between items-center">
-              <span className="text-cyan-100 text-sm opacity-90">Total Profit/Loss</span>
-              <span className={`text-2xl font-bold ${
-                calculateTotalProfitLoss() >= 0 ? 'text-green-300' : 'text-red-300'
-              }`}>
-                {calculateTotalProfitLoss() >= 0 ? '+' : ''}{formatCurrency(calculateTotalProfitLoss())}
+              <span className="text-cyan-100 text-sm opacity-90">Cash Balance</span>
+              <span className="text-2xl font-bold text-white">
+                {formatCurrency(portfolio?.cashBalance ? parseFloat(portfolio.cashBalance.toString()) : 0)}
               </span>
             </div>
+
+            {/* Stocks Value */}
+            <div className="flex justify-between items-center">
+              <span className="text-cyan-100 text-sm opacity-90">Stocks Value</span>
+              <span className="text-xl font-semibold text-white/90">
+                {formatCurrency(totalValue)}
+              </span>
+            </div>
+
+            {/* Total Profit/Loss */}
+            {positions.length > 0 && (
+              <div className="flex justify-between items-center pt-3 border-t border-white/10">
+                <span className="text-cyan-100 text-sm opacity-90">Total Profit/Loss</span>
+                <span className={`text-2xl font-bold ${
+                  calculateTotalProfitLoss() >= 0 ? 'text-green-300' : 'text-red-300'
+                }`}>
+                  {calculateTotalProfitLoss() >= 0 ? '+' : ''}{formatCurrency(calculateTotalProfitLoss())}
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* Cash Management Buttons */}
+          <div className="mt-6 flex gap-2">
+            <button
+              onClick={() => { setCashModalType('deposit'); setShowCashModal(true); }}
+              className="flex-1 bg-white/20 hover:bg-white/30 backdrop-blur-sm rounded-xl py-3 font-semibold transition-all"
+            >
+              + Deposit
+            </button>
+            <button
+              onClick={() => { setCashModalType('withdraw'); setShowCashModal(true); }}
+              className="flex-1 bg-white/20 hover:bg-white/30 backdrop-blur-sm rounded-xl py-3 font-semibold transition-all"
+            >
+              − Withdraw
+            </button>
+            <button
+              onClick={() => { loadTransactions(); setShowTransactions(true); }}
+              className="flex-1 bg-white/20 hover:bg-white/30 backdrop-blur-sm rounded-xl py-3 font-semibold transition-all"
+            >
+              History
+            </button>
           </div>
         </div>
-      </div>
-
-      {/* Portfolio Performance Chart */}
-      <div className="px-6 pb-6">
-        <PortfolioPerformanceChart token={token} />
-      </div>
-
-      {/* Sector Allocation Chart */}
-      <div className="px-6 pb-6">
-        <SectorAllocationChart token={token} />
       </div>
 
       {/* Action Buttons */}
@@ -419,9 +563,7 @@ export default function PortfolioPage() {
             </div>
           )}
         </div>
-        {initialLoading ? (
-          <InlineLoader message="Loading your portfolio..." />
-        ) : positions.length === 0 ? (
+        {positions.length === 0 ? (
           <div className="bg-white/5 backdrop-blur-xl rounded-3xl p-8 text-center border border-white/10">
             <p className="text-gray-500">No positions yet</p>
             <p className="text-gray-600 text-sm mt-1">Add your first stock to start</p>
@@ -429,16 +571,10 @@ export default function PortfolioPage() {
         ) : (
           <div className="space-y-3">
             {positions.map((position) => {
-              // Ensure all values are properly parsed as numbers
-              const quantity = parseFloat(position.quantity?.toString() || '0');
-              const currentPrice = parseFloat(position.currentPrice?.toString() || '0');
-              const avgBuyPrice = parseFloat(position.avgBuyPrice?.toString() || '0');
-
-              const currentValue = quantity * currentPrice;
-              const costBasis = quantity * avgBuyPrice;
+              const currentValue = position.quantity * position.currentPrice;
+              const costBasis = position.quantity * position.avgBuyPrice;
               const profitLoss = currentValue - costBasis;
-              const profitLossPercent = costBasis > 0 ? (profitLoss / costBasis) * 100 : 0;
-
+              const profitLossPercent = (profitLoss / costBasis) * 100;
               const recommendation = recommendations[position.asset.symbol];
               const chartData = miniCharts[position.asset.symbol];
               const chartPrices = chartData?.prices || [];
@@ -449,7 +585,7 @@ export default function PortfolioPage() {
                   key={position.id} 
                   className="bg-zinc-900 rounded-xl p-4 border border-zinc-800"
                 >
-                  {/* Top: Symbol, Badge, Remove */}
+                  {/* Top: Symbol, Badge, Sell/Remove buttons */}
                   <div className="flex justify-between items-center mb-3">
                     <div className="flex items-center gap-2">
                       <h3 className="text-xl font-bold">{position.asset.symbol}</h3>
@@ -463,28 +599,33 @@ export default function PortfolioPage() {
                         </span>
                       )}
                     </div>
-                    <button
-                      onClick={() => openSellModal(position)}
-                      className="text-red-400 text-sm hover:text-red-300"
-                    >
-                      Sell
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => { setSelectedPosition(position); setShowSellModal(true); }}
+                        className="text-green-400 text-sm hover:text-green-300 font-semibold"
+                      >
+                        Sell
+                      </button>
+                      <button
+                        onClick={() => deletePosition(position.id)}
+                        className="text-red-400 text-sm hover:text-red-300"
+                      >
+                        Remove
+                      </button>
+                    </div>
                   </div>
 
                   {/* Value and P/L */}
                   <div className="mb-4">
                     {/* Live stock price per share */}
                     <div className="text-sm text-gray-400 mb-1">
-                      €{currentPrice.toFixed(2)} per share
+                      €{parseFloat(position.currentPrice.toString()).toFixed(2)} per share
                     </div>
-                    {/* Total value */}
+                    {/* Total value - smaller */}
                     <div className="text-xl font-bold mb-1">{formatCurrency(currentValue)}</div>
-                    {/* Profit/Loss */}
-                    {costBasis > 0 && (
-                      <div className={`text-base font-semibold ${profitLoss >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                        {profitLoss >= 0 ? '+' : ''}{formatCurrency(profitLoss)} ({profitLoss >= 0 ? '+' : ''}{profitLossPercent.toFixed(2)}%)
-                      </div>
-                    )}
+                    <div className={`text-base font-semibold ${profitLoss >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                      {profitLoss >= 0 ? '+' : ''}{formatCurrency(profitLoss)} ({profitLoss >= 0 ? '+' : ''}{profitLossPercent.toFixed(2)}%)
+                    </div>
                   </div>
 
                   {/* Timeframe Buttons - Centered, spacious */}
@@ -516,12 +657,11 @@ export default function PortfolioPage() {
                   </div>
 
                   {/* Large Revolut-style Chart with Grid & Hover */}
-                  {chartPrices.length > 1 && chartTimestamps.length > 1 ? (
+                  {chartPrices.length > 0 && (
                     <div className="relative mb-4">
                       {/* Chart container */}
-                      <div
-                        className="h-48 w-full rounded-xl overflow-hidden bg-black relative touch-none"
-                        style={{ minHeight: '192px', WebkitTapHighlightColor: 'transparent' }}
+                      <div 
+                        className="h-48 rounded-xl overflow-hidden bg-black relative cursor-crosshair"
                         onMouseMove={(e) => {
                           const rect = e.currentTarget.getBoundingClientRect();
                           const x = e.clientX - rect.left;
@@ -590,7 +730,7 @@ export default function PortfolioPage() {
                           setHoverData(prev => ({ ...prev, [position.asset.symbol]: null }));
                         }}
                       >
-                        <svg viewBox="0 0 400 180" className="w-full h-full" preserveAspectRatio="none" style={{ display: 'block', width: '100%', height: '100%' }}>
+                        <svg viewBox="0 0 400 180" className="w-full h-full" preserveAspectRatio="none">
                           <defs>
                             <linearGradient id={`g${position.id}`} x1="0%" y1="0%" x2="0%" y2="100%">
                               <stop offset="0%" stopColor="#f87171" stopOpacity="0.15"/>
@@ -802,61 +942,48 @@ export default function PortfolioPage() {
                         )}
                       </div>
                     </div>
-                  ) : chartPrices.length === 0 ? null : (
-                    <div className="text-xs text-gray-500 mb-2 text-center p-4 bg-zinc-800 rounded-xl">
-                      Chart unavailable - insufficient data
-                    </div>
                   )}
 
                   {/* Bottom: Stats */}
                   <div className="flex justify-between text-xs text-gray-400 mb-3">
-                    <span>{quantity.toFixed(2)} shares</span>
-                    <span>Avg €{avgBuyPrice.toFixed(2)}</span>
-                    <span>Now €{currentPrice.toFixed(2)}</span>
+                    <span>{position.quantity} shares</span>
+                    <span>Avg {formatCurrency(position.avgBuyPrice)}</span>
+                    <span>Now {formatCurrency(position.currentPrice)}</span>
                   </div>
 
                   {/* RULE OF 40 */}
-                  {ruleOf40Data[position.asset.symbol] && ruleOf40Data[position.asset.symbol].result !== 'INSUFFICIENT_DATA' && (
-                    <div className="pt-3 border-t border-zinc-800">
-                      <div className="bg-zinc-800/50 rounded-lg p-3 border border-zinc-700 mb-2">
-                        <div className="flex items-center justify-between mb-2">
-                          <h4 className="text-xs font-semibold text-white">Rule of 40</h4>
-                          <span className={`px-2 py-0.5 rounded text-xs font-bold ${
-                            ruleOf40Data[position.asset.symbol].classification === 'EXCELLENT' ? 'bg-green-600 text-white' :
-                            ruleOf40Data[position.asset.symbol].result === 'PASS' ? 'bg-green-600 text-white' :
-                            ruleOf40Data[position.asset.symbol].classification === 'WEAK' ? 'bg-yellow-600 text-white' :
-                            'bg-red-600 text-white'
-                          }`}>
-                            {ruleOf40Data[position.asset.symbol].classification || ruleOf40Data[position.asset.symbol].result}
-                          </span>
-                        </div>
-                        <div className="space-y-1">
-                          <div className="flex justify-between items-center text-xs">
-                            <span className="text-gray-400">Score</span>
-                            <span className="font-bold text-white">
-                              {ruleOf40Data[position.asset.symbol].rule_of_40_score?.toFixed(1)}
-                            </span>
-                          </div>
-                          <div className="flex justify-between items-center text-xs">
-                            <span className="text-gray-400">Revenue Growth</span>
-                            <span className={`font-semibold ${
-                              ruleOf40Data[position.asset.symbol].revenue_growth_percent >= 0 ? 'text-green-400' : 'text-red-400'
-                            }`}>
-                              {ruleOf40Data[position.asset.symbol].revenue_growth_percent >= 0 ? '+' : ''}
-                              {ruleOf40Data[position.asset.symbol].revenue_growth_percent?.toFixed(1)}%
-                            </span>
-                          </div>
-                          <div className="flex justify-between items-center text-xs">
-                            <span className="text-gray-400">{ruleOf40Data[position.asset.symbol].margin_type_used} Margin</span>
-                            <span className={`font-semibold ${
-                              ruleOf40Data[position.asset.symbol].profit_margin_percent >= 0 ? 'text-green-400' : 'text-red-400'
-                            }`}>
-                              {ruleOf40Data[position.asset.symbol].profit_margin_percent >= 0 ? '+' : ''}
-                              {ruleOf40Data[position.asset.symbol].profit_margin_percent?.toFixed(1)}%
-                            </span>
+                  {ruleOf40Data[position.asset.symbol] && (
+                    <div className="bg-zinc-800/50 rounded-lg p-3 border border-zinc-700 mb-3">
+                      <div className="flex items-center gap-2 mb-2">
+                        <h4 className="text-xs font-semibold text-white">Rule of 40</h4>
+                        <div className="group relative">
+                          <span className="text-gray-500 hover:text-gray-300 text-xs cursor-help">ⓘ</span>
+                          <div className="invisible group-hover:visible absolute left-0 top-6 z-50 w-64 bg-black border border-white/20 rounded-lg p-2 text-[10px] text-gray-300 shadow-xl">
+                            A metric for SaaS/software companies. Revenue Growth % + Profit Margin % should be ≥ 40%. Higher is better.
                           </div>
                         </div>
+                        <span className={`ml-auto px-2 py-0.5 rounded text-xs font-bold ${
+                          ruleOf40Data[position.asset.symbol].rating === 'Excellent' ? 'bg-green-600 text-white' :
+                          ruleOf40Data[position.asset.symbol].rating === 'Good' ? 'bg-blue-600 text-white' :
+                          ruleOf40Data[position.asset.symbol].rating === 'Fair' ? 'bg-yellow-600 text-white' :
+                          'bg-red-600 text-white'
+                        }`}>
+                          {ruleOf40Data[position.asset.symbol].rating || 'N/A'}
+                        </span>
                       </div>
+                      <div className="flex justify-between text-xs mb-1">
+                        <span className="text-gray-400">Score</span>
+                        <span className="font-bold text-white">{(ruleOf40Data[position.asset.symbol].ruleOf40Score || 0).toFixed(1)}%</span>
+                      </div>
+                      <div className="flex justify-between text-xs mb-1">
+                        <span className="text-gray-400">Revenue Growth</span>
+                        <span className="text-white">{(ruleOf40Data[position.asset.symbol].revenueGrowth || 0).toFixed(1)}%</span>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span className="text-gray-400">Profit Margin</span>
+                        <span className="text-white">{(ruleOf40Data[position.asset.symbol].profitMargin || 0).toFixed(1)}%</span>
+                      </div>
+                      <p className="text-[10px] text-gray-400 mt-2">{ruleOf40Data[position.asset.symbol].description || 'No data available'}</p>
                     </div>
                   )}
 
@@ -951,6 +1078,18 @@ export default function PortfolioPage() {
 
               <h3 className="text-2xl font-semibold mb-6">Add Position</h3>
 
+              {/* Show cash balance warning */}
+              <div className="mb-4 p-3 bg-blue-500/20 border border-blue-500/30 rounded-lg">
+                <p className="text-xs text-blue-300">
+                  Available Cash: {formatCurrency(portfolio?.cashBalance || 0)}
+                </p>
+                {newPosition.quantity && newPosition.avgBuyPrice && (
+                  <p className="text-xs text-blue-300 mt-1">
+                    This purchase will cost: {formatCurrency(parseFloat(newPosition.quantity) * parseFloat(newPosition.avgBuyPrice))}
+                  </p>
+                )}
+              </div>
+
               <div className="space-y-4">
                 <div>
                   <label className="text-gray-500 text-xs font-medium mb-2 block">SYMBOL</label>
@@ -996,9 +1135,8 @@ export default function PortfolioPage() {
                 <button
                   onClick={addPosition}
                   disabled={loading}
-                  className="flex-1 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 rounded-2xl py-4 font-semibold transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                  className="flex-1 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 rounded-2xl py-4 font-semibold transition-all disabled:opacity-50"
                 >
-                  {loading && <LoadingSpinner size="sm" color="white" />}
                   {loading ? 'Adding...' : 'Add Position'}
                 </button>
               </div>
@@ -1007,16 +1145,156 @@ export default function PortfolioPage() {
         </div>
       )}
 
-      {/* Sell Shares Modal */}
-      {showSellPosition && selectedPosition && (
+      {/* Cash Deposit/Withdraw Modal */}
+      {showCashModal && (
         <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-end justify-center z-50 animate-in fade-in duration-200">
           <div className="bg-zinc-900 rounded-t-3xl w-full max-w-md border-t border-white/10 animate-in slide-in-from-bottom duration-300">
             <div className="p-6">
-              {/* Handle bar */}
+              <div className="w-12 h-1 bg-gray-700 rounded-full mx-auto mb-6"></div>
+
+              <h3 className="text-2xl font-semibold mb-2">
+                {cashModalType === 'deposit' ? 'Deposit Cash' : 'Withdraw Cash'}
+              </h3>
+              <p className="text-gray-400 text-sm mb-6">
+                Current balance: {formatCurrency(portfolio?.cashBalance || 0)}
+              </p>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="text-gray-500 text-xs font-medium mb-2 block">AMOUNT ($)</label>
+                  <input
+                    type="number"
+                    placeholder="1000.00"
+                    value={cashAmount}
+                    onChange={(e) => setCashAmount(e.target.value)}
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-4 text-white placeholder-gray-600 focus:outline-none focus:border-cyan-500 transition-colors text-2xl font-bold"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-3 mt-8 pb-2">
+                <button
+                  onClick={() => { setShowCashModal(false); setCashAmount(''); }}
+                  className="flex-1 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl py-4 font-medium transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={cashModalType === 'deposit' ? depositCash : withdrawCash}
+                  disabled={loading}
+                  className={`flex-1 rounded-2xl py-4 font-semibold transition-all disabled:opacity-50 ${
+                    cashModalType === 'deposit'
+                      ? 'bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700'
+                      : 'bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700'
+                  }`}
+                >
+                  {loading ? 'Processing...' : (cashModalType === 'deposit' ? 'Deposit' : 'Withdraw')}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Transaction History Modal */}
+      {showTransactions && (
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-end justify-center z-50 animate-in fade-in duration-200">
+          <div className="bg-zinc-900 rounded-t-3xl w-full max-w-md border-t border-white/10 animate-in slide-in-from-bottom duration-300 max-h-[80vh] overflow-hidden flex flex-col">
+            <div className="p-6 flex-shrink-0">
+              <div className="w-12 h-1 bg-gray-700 rounded-full mx-auto mb-6"></div>
+              <h3 className="text-2xl font-semibold mb-2">Transaction History</h3>
+              <p className="text-gray-400 text-sm">Recent activity</p>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-6 pb-6">
+              {transactions.length === 0 ? (
+                <div className="text-center py-12">
+                  <p className="text-gray-500">No transactions yet</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {transactions.map((tx) => (
+                    <div key={tx.id} className="bg-zinc-800 rounded-lg p-4 border border-zinc-700">
+                      <div className="flex justify-between items-start mb-2">
+                        <div>
+                          <span className={`px-2 py-0.5 rounded text-xs font-bold ${
+                            tx.type === 'DEPOSIT' ? 'bg-green-600 text-white' :
+                            tx.type === 'WITHDRAWAL' ? 'bg-red-600 text-white' :
+                            tx.type === 'BUY' ? 'bg-blue-600 text-white' :
+                            'bg-orange-600 text-white'
+                          }`}>
+                            {tx.type}
+                          </span>
+                          {tx.symbol && <span className="ml-2 text-sm font-semibold">{tx.symbol}</span>}
+                        </div>
+                        <span className={`text-lg font-bold ${
+                          tx.type === 'DEPOSIT' || tx.type === 'SELL' ? 'text-green-400' : 'text-red-400'
+                        }`}>
+                          {tx.type === 'DEPOSIT' || tx.type === 'SELL' ? '+' : '-'}{formatCurrency(tx.amount)}
+                        </span>
+                      </div>
+                      {tx.quantity && tx.price && (
+                        <p className="text-xs text-gray-400 mb-1">
+                          {tx.quantity} shares @ {formatCurrency(tx.price)}
+                        </p>
+                      )}
+                      {tx.notes && (
+                        <p className="text-xs text-gray-400 mb-2">{tx.notes}</p>
+                      )}
+                      <div className="flex justify-between text-xs text-gray-500">
+                        <span>{new Date(tx.createdAt).toLocaleString()}</span>
+                        <span>Balance: {formatCurrency(tx.cashBalanceAfter)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="p-6 flex-shrink-0 border-t border-zinc-800">
+              <div className="flex gap-3">
+                {transactions.length > 0 && (
+                  <button
+                    onClick={deleteAllTransactions}
+                    className="flex-1 bg-red-600/20 hover:bg-red-600/30 border border-red-600/40 rounded-2xl py-4 font-medium transition-all text-red-400"
+                  >
+                    Delete History
+                  </button>
+                )}
+                <button
+                  onClick={() => setShowTransactions(false)}
+                  className="flex-1 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl py-4 font-medium transition-all"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sell Shares Modal */}
+      {showSellModal && selectedPosition && (
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-end justify-center z-50 animate-in fade-in duration-200">
+          <div className="bg-zinc-900 rounded-t-3xl w-full max-w-md border-t border-white/10 animate-in slide-in-from-bottom duration-300">
+            <div className="p-6">
               <div className="w-12 h-1 bg-gray-700 rounded-full mx-auto mb-6"></div>
 
               <h3 className="text-2xl font-semibold mb-2">Sell {selectedPosition.asset.symbol}</h3>
-              <p className="text-gray-400 text-sm mb-6">You own {selectedPosition.quantity} shares</p>
+              <p className="text-gray-400 text-sm mb-4">
+                You own {selectedPosition.quantity} shares @ ${parseFloat(selectedPosition.currentPrice.toString()).toFixed(2)} each
+              </p>
+
+              <div className="mb-4 p-3 bg-green-500/20 border border-green-500/30 rounded-lg">
+                <p className="text-xs text-green-300">
+                  Total Value: {formatCurrency(selectedPosition.quantity * parseFloat(selectedPosition.currentPrice.toString()))}
+                </p>
+                {sellQuantity && parseFloat(sellQuantity) > 0 && (
+                  <p className="text-xs text-green-300 mt-1">
+                    Proceeds from sale: {formatCurrency(parseFloat(sellQuantity) * parseFloat(selectedPosition.currentPrice.toString()))}
+                  </p>
+                )}
+              </div>
 
               <div className="space-y-4">
                 <div>
@@ -1027,36 +1305,14 @@ export default function PortfolioPage() {
                     value={sellQuantity}
                     onChange={(e) => setSellQuantity(e.target.value)}
                     max={selectedPosition.quantity}
-                    step="0.01"
-                    className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-4 text-white placeholder-gray-600 focus:outline-none focus:border-red-500 transition-colors"
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-4 text-white placeholder-gray-600 focus:outline-none focus:border-green-500 transition-colors text-2xl font-bold"
                   />
                 </div>
-
-                {sellQuantity && parseFloat(sellQuantity) > 0 && (
-                  <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
-                    <div className="flex justify-between text-sm mb-2">
-                      <span className="text-gray-400">Selling:</span>
-                      <span className="text-white font-semibold">{parseFloat(sellQuantity)} shares</span>
-                    </div>
-                    <div className="flex justify-between text-sm mb-2">
-                      <span className="text-gray-400">At price:</span>
-                      <span className="text-white font-semibold">€{selectedPosition.currentPrice.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between text-sm pt-2 border-t border-white/10">
-                      <span className="text-gray-400">Total value:</span>
-                      <span className="text-white font-bold">{formatCurrency(parseFloat(sellQuantity) * selectedPosition.currentPrice)}</span>
-                    </div>
-                  </div>
-                )}
               </div>
 
               <div className="flex gap-3 mt-8 pb-2">
                 <button
-                  onClick={() => {
-                    setShowSellPosition(false);
-                    setSelectedPosition(null);
-                    setSellQuantity('');
-                  }}
+                  onClick={() => { setShowSellModal(false); setSellQuantity(''); setSelectedPosition(null); }}
                   className="flex-1 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl py-4 font-medium transition-all"
                 >
                   Cancel
@@ -1064,9 +1320,8 @@ export default function PortfolioPage() {
                 <button
                   onClick={sellShares}
                   disabled={loading}
-                  className="flex-1 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 rounded-2xl py-4 font-semibold transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                  className="flex-1 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 rounded-2xl py-4 font-semibold transition-all disabled:opacity-50"
                 >
-                  {loading && <LoadingSpinner size="sm" color="white" />}
                   {loading ? 'Selling...' : 'Sell Shares'}
                 </button>
               </div>
@@ -1075,12 +1330,70 @@ export default function PortfolioPage() {
         </div>
       )}
 
-      {/* Transaction History Modal */}
-      {showTransactionHistory && (
-        <TransactionHistory
-          token={token}
-          onClose={() => setShowTransactionHistory(false)}
-        />
+      {/* Custom Confirm Modal */}
+      {confirmModal.show && (
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center z-50 animate-in fade-in duration-200 px-6">
+          <div className="bg-zinc-900 rounded-3xl w-full max-w-sm border border-white/10 animate-in zoom-in-95 duration-200">
+            <div className="p-6">
+              <h3 className="text-xl font-semibold mb-3">{confirmModal.title}</h3>
+              <p className="text-gray-400 text-sm leading-relaxed">{confirmModal.message}</p>
+            </div>
+            <div className="p-6 pt-0 flex gap-3">
+              <button
+                onClick={() => setConfirmModal({ ...confirmModal, show: false })}
+                className="flex-1 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl py-4 font-medium transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  confirmModal.onConfirm();
+                  setConfirmModal({ ...confirmModal, show: false });
+                }}
+                className="flex-1 bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 rounded-2xl py-4 font-semibold transition-all"
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Custom Alert Modal */}
+      {alertModal.show && (
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center z-50 animate-in fade-in duration-200 px-6">
+          <div className="bg-zinc-900 rounded-3xl w-full max-w-sm border border-white/10 animate-in zoom-in-95 duration-200">
+            <div className="p-6">
+              <div className="flex items-center gap-3 mb-3">
+                {alertModal.type === 'success' && (
+                  <div className="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center">
+                    <span className="text-green-400 text-xl">✓</span>
+                  </div>
+                )}
+                {alertModal.type === 'error' && (
+                  <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center">
+                    <span className="text-red-400 text-xl">✕</span>
+                  </div>
+                )}
+                {alertModal.type === 'info' && (
+                  <div className="w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center">
+                    <span className="text-blue-400 text-xl">i</span>
+                  </div>
+                )}
+                <h3 className="text-xl font-semibold">{alertModal.title}</h3>
+              </div>
+              <p className="text-gray-400 text-sm leading-relaxed ml-13">{alertModal.message}</p>
+            </div>
+            <div className="p-6 pt-0">
+              <button
+                onClick={() => setAlertModal({ ...alertModal, show: false })}
+                className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 rounded-2xl py-4 font-semibold transition-all"
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
