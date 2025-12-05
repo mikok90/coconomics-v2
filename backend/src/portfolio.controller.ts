@@ -58,8 +58,18 @@ export class PortfolioController {
   async getRuleOf40(@Param('symbol') symbol: string) {
     const data = await this.stockPriceService.calculateRuleOf40(symbol);
 
-    // Return the data as-is with snake_case to match frontend expectations
-    return data;
+    // Transform snake_case to camelCase for frontend
+    const classification = data.classification || 'POOR';
+    // Convert EXCELLENT -> Excellent, POOR -> Poor, etc.
+    const rating = classification.charAt(0).toUpperCase() + classification.slice(1).toLowerCase();
+
+    return {
+      revenueGrowth: data.revenue_growth_percent || 0,
+      profitMargin: data.profit_margin_percent || 0,
+      ruleOf40Score: data.rule_of_40_score || 0,
+      rating: rating,
+      description: this.getRuleOf40Description(data)
+    };
   }
 
   private getRuleOf40Description(data: any): string {

@@ -89,36 +89,57 @@
 6. ⚠️ If localhost freezes: Clean .next cache with `cmd //c "if exist .next rd /s /q .next"`
 7. ⚠️ Check BOTH Vercel AND Render deployment status after pushing
 
-## Files Modified This Session
+## Files Modified This Session (Dec 6, 2025)
+
+### Previous Session (Dec 5)
 - `backend/src/stock-price.service.ts` - Added price=0 validation
 - `backend/src/portfolio.service.ts` - Added createSnapshot calls, removed error catching
 - `frontend/app/components/SectorAllocationChart.tsx` - Granular tech sectors
-- `frontend/app/page.tsx` - Button position, frontend validation
+- `frontend/app/page.tsx` - Button position, frontend validation, delete confirmation
+
+### Current Session Fixes (Dec 6)
+- `backend/src/app.module.ts` - Added PortfolioSnapshot entity registration (CRITICAL FIX)
+- `backend/src/portfolio.controller.ts` - Fixed Rule of 40 response format (snake_case → camelCase)
 
 ## Current Deployment Status
 
 ### Vercel (Frontend) ✅
 - **Status:** DEPLOYED & WORKING
-- **Commit:** 00702ce (or later)
-- **User Confirmed:** Add Stock button above charts, granular sectors working
+- **Latest Commit:** 77aa5a3 - Delete confirmation fixes
+- **User Confirmed:** Granular sectors, button position, valid stock validation all working
 
-### Render (Backend) ❌
-- **Status:** STUCK ON OLD COMMIT
-- **Current Deploy:** f59afcf (Dec 4, 9:35 PM)
-- **Should Be:** 00702ce (Dec 5)
-- **Issue:** Manual deploy via dashboard still deploys f59afcf
-- **Troubleshooting Needed:**
-  1. Check Render → Settings → Branch (should be "main")
-  2. Check Render → Settings → Auto-Deploy (should be ON)
-  3. May need to disconnect and reconnect GitHub repo
-  4. May need to manually change commit in Render UI
+### Render (Backend) ✅
+- **Status:** WORKING
+- **New Service:** coconomics-backend-new (correct repo: coconomics-v2)
+- **Latest Deploy:** 77aa5a3
+- **User Reported Issues (Dec 6):**
+  - ❌ Portfolio Performance chart empty (FIXED: Missing PortfolioSnapshot entity registration)
+  - ❌ Rule of 40 showing N/A everywhere (FIXED: Wrong response format)
+
+## Issues Fixed This Session (Dec 6)
+1. ✅ **Portfolio Performance Chart Empty**
+   - **Problem:** PortfolioSnapshot entity not registered in app.module.ts
+   - **Symptom:** Backend error "No metadata for PortfolioSnapshot was found"
+   - **Fix:** Added PortfolioSnapshot to entities import and TypeORM configuration
+   - **Result:** Performance chart will now display snapshots after stock purchases
+
+2. ✅ **Rule of 40 Showing N/A**
+   - **Problem:** Backend returning snake_case (revenue_growth_percent), frontend expecting camelCase (revenueGrowth)
+   - **Fix:** Transformed response in portfolio.controller.ts getRuleOf40 endpoint
+   - **Result:** Rule of 40 metrics now display correctly
+
+3. ✅ **Delete Confirmation Message**
+   - **Previous:** Generic "Remove Position" with "Cancel/Confirm" buttons
+   - **Now:** "Are you sure you want to remove this stock?" with "No/Yes" buttons
 
 ## Next Session Tasks
 1. ✅ DONE: Fixed Render deployment (created new service)
-2. ⏳ TESTING: User testing invalid stock validation on production
-3. ⏳ TESTING: User testing performance chart populates after trades
-4. 🔜 TODO: Implement collapsible/expandable stock cards (deferred)
-5. 🔜 TODO: Consider deleting old Render service (coconomics-backend) once new one confirmed working
+2. ✅ DONE: Fixed valid stock validation errors
+3. ✅ DONE: Fixed portfolio performance chart (entity registration)
+4. ✅ DONE: Fixed Rule of 40 display (response format)
+5. ✅ DONE: Fixed delete confirmation dialog
+6. 🔜 TODO: Implement collapsible/expandable stock cards (deferred)
+7. 🔜 TODO: Consider deleting old Render service (coconomics-backend) once everything confirmed working
 
 ## Quick Links
 - Full details: Read PROJECT_CONTEXT.md

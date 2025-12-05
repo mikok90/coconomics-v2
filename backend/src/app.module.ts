@@ -3,7 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule } from '@nestjs/config';
 import { PortfolioModule } from './portfolio.module';
 import { AuthModule } from './auth.module';
-import { User, Portfolio, Asset, Position, PriceHistory, RebalanceHistory, OptimizationResult, Transaction } from './entities';
+import { User, Portfolio, Asset, Position, PriceHistory, RebalanceHistory, OptimizationResult, Transaction, PortfolioSnapshot } from './entities';
 
 @Module({
   imports: [
@@ -18,7 +18,7 @@ import { User, Portfolio, Asset, Position, PriceHistory, RebalanceHistory, Optim
       username: process.env.DB_USER || 'postgres',
       password: process.env.DB_PASSWORD || '',
       database: process.env.DB_NAME || 'coconomics',
-      entities: [User, Portfolio, Asset, Position, PriceHistory, RebalanceHistory, OptimizationResult, Transaction],
+      entities: [User, Portfolio, Asset, Position, PriceHistory, RebalanceHistory, OptimizationResult, Transaction, PortfolioSnapshot],
       synchronize: true, // Auto-create/update tables
       logging: false, // Disable in production for performance
       ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false,
