@@ -47,12 +47,14 @@ export class StockPriceService {
       const previousClose = data.pc;
 
       // Validate that the stock symbol exists (Finnhub returns 0 for invalid symbols)
-      if (!currentPrice || currentPrice === 0 || !previousClose || previousClose === 0) {
+      // Only check currentPrice - previousClose can legitimately be 0 (after hours, weekends, new IPOs)
+      if (!currentPrice || currentPrice === 0) {
         throw new Error(`Invalid stock symbol: ${symbol}`);
       }
 
       const change = currentPrice - previousClose;
-      const changePercent = (change / previousClose) * 100;
+      // Handle division by zero if previousClose is 0
+      const changePercent = previousClose !== 0 ? (change / previousClose) * 100 : 0;
 
       console.log(`Successfully fetched quote for ${symbol}: $${currentPrice}`);
 

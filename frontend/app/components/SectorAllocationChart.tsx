@@ -16,26 +16,26 @@ interface SectorData {
   percentage: number;
 }
 
-// Color palette for sectors
+// Color palette for sectors - Vibrant, diverse colors
 const SECTOR_COLORS: Record<string, string> = {
-  // Technology subsectors
-  'Semiconductors': '#3b82f6',
-  'Cloud Infrastructure': '#06b6d4',
-  'AI & Quantum': '#8b5cf6',
-  'Software & SaaS': '#0ea5e9',
-  'Hardware & Devices': '#1d4ed8',
-  'E-Commerce & Digital': '#2563eb',
-  // Other sectors
-  'Healthcare': '#10b981',
-  'Finance': '#f59e0b',
-  'Consumer': '#ec4899',
-  'Energy': '#ef4444',
-  'Industrial': '#8b5cf6',
-  'Materials': '#14b8a6',
-  'Utilities': '#6366f1',
-  'Real Estate': '#f97316',
-  'Telecommunications': '#06b6d4',
-  'Other': '#64748b'
+  // Technology subsectors - distinct, modern colors
+  'Semiconductors': '#9333ea',      // Rich purple
+  'Cloud Infrastructure': '#06b6d4', // Cyan/teal
+  'AI & Quantum': '#ec4899',        // Hot pink/magenta
+  'Software & SaaS': '#3b82f6',     // Bright blue
+  'Hardware & Devices': '#64748b',  // Cool gray/slate
+  'E-Commerce & Digital': '#f59e0b', // Amber/gold
+  // Other sectors - vibrant, well-differentiated
+  'Healthcare': '#10b981',          // Emerald green
+  'Finance': '#eab308',             // Yellow
+  'Consumer': '#f97316',            // Orange
+  'Energy': '#ef4444',              // Red
+  'Industrial': '#6366f1',          // Indigo
+  'Materials': '#14b8a6',           // Teal
+  'Utilities': '#84cc16',           // Lime green
+  'Real Estate': '#a855f7',         // Purple
+  'Telecommunications': '#0ea5e9',  // Sky blue
+  'Other': '#71717a'                // Gray
 };
 
 const getSectorFromSymbol = (symbol: string): string => {
