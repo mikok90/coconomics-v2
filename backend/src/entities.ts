@@ -5,10 +5,10 @@ export class User {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({ unique: true })
+  @Column({ unique: true, nullable: true })
   email: string;
 
-  @Column({ name: 'password_hash' })
+  @Column({ name: 'password_hash', nullable: true })
   passwordHash: string;
 
   @Column({ nullable: true })
@@ -32,11 +32,20 @@ export class Portfolio {
   @Column({ name: 'user_id' })
   userId: number;
 
-  @Column()
+  @Column({ default: 'My Portfolio' })
   name: string;
 
   @Column({ type: 'decimal', precision: 15, scale: 2, name: 'total_value', default: 0 })
   totalValue: number;
+
+  @Column({ type: 'decimal', precision: 15, scale: 2, name: 'cash_balance', default: 0 })
+  cashBalance: number;
+
+  @Column({ type: 'decimal', precision: 15, scale: 2, name: 'total_deposits', default: 0 })
+  totalDeposits: number;
+
+  @Column({ type: 'decimal', precision: 15, scale: 2, name: 'total_withdrawals', default: 0 })
+  totalWithdrawals: number;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
@@ -50,6 +59,9 @@ export class Portfolio {
 
   @OneToMany(() => Position, position => position.portfolio)
   positions: Position[];
+
+  @OneToMany(() => Transaction, transaction => transaction.portfolio)
+  transactions: Transaction[];
 }
 
 @Entity('assets')
@@ -60,7 +72,7 @@ export class Asset {
   @Column({ unique: true, length: 10 })
   symbol: string;
 
-  @Column()
+  @Column({ nullable: true })
   name: string;
 
   @Column({ name: 'asset_type', default: 'stock' })
@@ -101,6 +113,12 @@ export class Position {
 
   @Column({ type: 'decimal', precision: 5, scale: 4, name: 'target_weight', nullable: true })
   targetWeight: number;
+
+  @Column({ type: 'decimal', precision: 15, scale: 2, name: 'last_rebalance_price', nullable: true })
+  lastRebalancePrice: number;
+
+  @Column({ type: 'varchar', length: 10, name: 'last_rebalance_action', nullable: true })
+  lastRebalanceAction: string;
 
   @Column({ name: 'last_updated', type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
   lastUpdated: Date;
@@ -190,6 +208,68 @@ export class OptimizationResult {
 
   @Column({ name: 'calculated_at', type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
   calculatedAt: Date;
+
+  @ManyToOne(() => Portfolio)
+  @JoinColumn({ name: 'portfolio_id' })
+  portfolio: Portfolio;
+}
+
+@Entity('transactions')
+export class Transaction {
+  @PrimaryGeneratedColumn()
+  id: number;
+
+  @Column({ name: 'portfolio_id' })
+  portfolioId: number;
+
+  @Column({ length: 20 })
+  type: string; // 'DEPOSIT', 'WITHDRAWAL', 'BUY', 'SELL'
+
+  @Column({ type: 'decimal', precision: 15, scale: 2 })
+  amount: number;
+
+  @Column({ nullable: true, length: 10 })
+  symbol: string; // For BUY/SELL transactions
+
+  @Column({ type: 'decimal', precision: 15, scale: 6, nullable: true })
+  quantity: number; // For BUY/SELL transactions
+
+  @Column({ type: 'decimal', precision: 15, scale: 2, nullable: true })
+  price: number; // Per share price for BUY/SELL
+
+  @Column({ type: 'decimal', precision: 15, scale: 2, name: 'cash_balance_after' })
+  cashBalanceAfter: number; // Cash balance after this transaction
+
+  @Column({ type: 'text', nullable: true })
+  notes: string;
+
+  @CreateDateColumn({ name: 'created_at' })
+  createdAt: Date;
+
+  @ManyToOne(() => Portfolio, portfolio => portfolio.transactions)
+  @JoinColumn({ name: 'portfolio_id' })
+  portfolio: Portfolio;
+}
+
+@Entity('portfolio_snapshots')
+export class PortfolioSnapshot {
+  @PrimaryGeneratedColumn()
+  id: number;
+
+  @Column({ name: 'portfolio_id' })
+  portfolioId: number;
+
+  @Column({ type: 'decimal', precision: 15, scale: 2, name: 'total_value' })
+  totalValue: number;
+
+  @Column({ type: 'decimal', precision: 15, scale: 2, name: 'cash_balance' })
+  cashBalance: number;
+
+  @Column({ type: 'decimal', precision: 15, scale: 2, name: 'positions_value' })
+  positionsValue: number;
+
+  @Column({ name: 'snapshot_date', type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
+  snapshotDate: Date;
 
   @ManyToOne(() => Portfolio)
   @JoinColumn({ name: 'portfolio_id' })

@@ -84,55 +84,103 @@ export class StockPriceService {
   }
 
   /**
-   * Get historical chart data using Finnhub
+   * Get historical chart data from Yahoo Finance (free, no API key needed)
    */
   async getChartData(symbol: string, range: string = '1d'): Promise<ChartData> {
     try {
-      if (!this.FINNHUB_API_KEY) {
-        throw new Error('FINNHUB_API_KEY not configured');
-      }
+      const { period1, period2, interval } = this.getYahooFinanceParams(range);
 
-      const url = `${this.FINNHUB_API}/stock/candle`;
-      const { resolution, from, to } = this.getTimeRangeForFinnhub(range);
+      // Yahoo Finance API endpoint
+      const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}`;
 
-      console.log(`Fetching chart from Finnhub: ${symbol}, range: ${range}, resolution: ${resolution}`);
+      console.log(`Fetching real chart data for ${symbol} from Yahoo Finance, range: ${range}`);
 
       const response = await axios.get(url, {
         params: {
-          symbol: symbol,
-          resolution: resolution,
-          from: from,
-          to: to,
-          token: this.FINNHUB_API_KEY
+          period1,
+          period2,
+          interval,
+          includePrePost: false,
+          events: 'div,splits'
         },
-        timeout: 10000
+        timeout: 10000,
+        headers: {
+          'User-Agent': 'Mozilla/5.0'
+        }
       });
 
-      console.log(`Finnhub response status: ${response.status}`);
-
-      if (!response.data || response.data.s === 'no_data' || !response.data.c) {
-        console.warn(`No chart data available for ${symbol}`);
+      if (!response.data?.chart?.result?.[0]) {
+        console.warn(`No chart data available for ${symbol} from Yahoo Finance`);
         return { timestamp: [], prices: [] };
       }
 
-      // Finnhub returns: {c: [close prices], t: [timestamps], o: [open], h: [high], l: [low], v: [volume], s: status}
-      const timestamps = response.data.t || [];
-      const prices = response.data.c || [];
+      const result = response.data.chart.result[0];
+      const timestamps = result.timestamp || [];
+      const closes = result.indicators?.quote?.[0]?.close || [];
 
-      console.log(`Successfully fetched ${prices.length} prices for ${symbol}`);
+      // Filter out null values
+      const validData = timestamps
+        .map((t: number, i: number) => ({ timestamp: t, price: closes[i] }))
+        .filter((d: any) => d.price !== null && d.price !== undefined);
+
+      console.log(`Successfully fetched ${validData.length} real prices for ${symbol} from Yahoo Finance`);
 
       return {
-        timestamp: timestamps,
-        prices: prices.filter((p: number) => p !== null && p !== undefined)
+        timestamp: validData.map((d: any) => d.timestamp),
+        prices: validData.map((d: any) => d.price)
       };
     } catch (error: any) {
-      console.error(`Error fetching chart for ${symbol}:`, error.response?.data || error.message);
-      // Return empty data instead of throwing - don't crash the server
+      console.error(`Error fetching chart from Yahoo Finance for ${symbol}:`, error.response?.data || error.message);
       return {
         timestamp: [],
         prices: []
       };
     }
+  }
+
+  /**
+   * Convert range to Yahoo Finance API parameters
+   */
+  private getYahooFinanceParams(range: string): { period1: number; period2: number; interval: string } {
+    const now = Math.floor(Date.now() / 1000);
+    let period1: number;
+    let interval: string;
+
+    switch (range) {
+      case '1d':
+        period1 = now - 86400; // 1 day ago
+        interval = '5m';
+        break;
+      case '5d':
+        period1 = now - (5 * 86400); // 5 days ago
+        interval = '15m';
+        break;
+      case '1mo':
+        period1 = now - (30 * 86400); // 30 days ago
+        interval = '1d';
+        break;
+      case '3mo':
+        period1 = now - (90 * 86400); // 90 days ago
+        interval = '1d';
+        break;
+      case '6mo':
+        period1 = now - (180 * 86400); // 180 days ago
+        interval = '1d';
+        break;
+      case '1y':
+        period1 = now - (365 * 86400); // 365 days ago
+        interval = '1wk';
+        break;
+      case '5y':
+        period1 = now - (5 * 365 * 86400); // 5 years ago
+        interval = '1mo';
+        break;
+      default:
+        period1 = now - 86400;
+        interval = '5m';
+    }
+
+    return { period1, period2: now, interval };
   }
 
   /**
@@ -189,7 +237,7 @@ export class StockPriceService {
     avgBuyPrice: number,
     currentPrice: number,
     monthsSinceStart: number = 1,
-    targetMonthlyGrowth: number = 0.01 // 1% monthly growth target
+    targetMonthlyGrowth: number = 0.015 // 1.5% monthly growth target
   ): {
     action: 'BUY' | 'SELL' | 'HOLD';
     amount: string;
@@ -233,64 +281,76 @@ export class StockPriceService {
 
   /**
    * Threshold Rebalancing Algorithm
-   * Buy/sell based on % deviation from average price
+   * Buy/sell based on % deviation from average cost basis
+   * Classic value investing approach: sell when profitable, buy when discounted
    */
   calculateThresholdRebalancing(
     quantity: number,
     avgBuyPrice: number,
-    currentPrice: number
+    currentPrice: number,
+    lastRebalancePrice?: number,
+    lastRebalanceAction?: string
   ): {
     action: 'BUY' | 'SELL' | 'HOLD';
     percentage: string;
     amount: string;
     shares: number;
     reason: string;
+    newRebalancePrice?: number;
   } {
+    // Always use average buy price as reference - this is your cost basis
     const priceChange = ((currentPrice - avgBuyPrice) / avgBuyPrice) * 100;
-    const currentValue = quantity * currentPrice;
-    
-    // Thresholds
+    const profitLoss = priceChange > 0 ? 'profit' : 'loss';
+    const absChange = Math.abs(priceChange);
+
+    // Sell thresholds - only when you're actually profitable
     if (priceChange >= 20) {
-      // +20% → Sell 40% of holdings
+      // +20% profit → Sell 40% to lock in major gains
       const sharesToSell = quantity * 0.4;
       return {
         action: 'SELL',
         percentage: '40%',
         amount: `€${(sharesToSell * currentPrice).toFixed(2)}`,
         shares: parseFloat(sharesToSell.toFixed(2)),
-        reason: `Price up ${priceChange.toFixed(1)}% from avg - take profits`
+        reason: `${absChange.toFixed(1)}% ${profitLoss} vs avg cost €${avgBuyPrice.toFixed(2)} - take substantial profits`
       };
     } else if (priceChange >= 10) {
-      // +10% → Sell 20% of holdings
+      // +10% profit → Sell 20% to lock in gains
       const sharesToSell = quantity * 0.2;
       return {
         action: 'SELL',
         percentage: '20%',
         amount: `€${(sharesToSell * currentPrice).toFixed(2)}`,
         shares: parseFloat(sharesToSell.toFixed(2)),
-        reason: `Price up ${priceChange.toFixed(1)}% from avg - lock gains`
+        reason: `${absChange.toFixed(1)}% ${profitLoss} vs avg cost €${avgBuyPrice.toFixed(2)} - lock in profits`
       };
-    } else if (priceChange <= -20) {
-      // -20% → Buy €200 worth
-      const buyAmount = 200;
+    }
+    // Buy thresholds - when stock is below your average cost (on sale!)
+    else if (priceChange <= -20) {
+      // -20% loss → Buy 30% more shares (proportional to position size)
+      const currentPositionValue = quantity * currentPrice;
+      const buyPercentage = 0.30;
+      const buyAmount = currentPositionValue * buyPercentage;
       const sharesToBuy = buyAmount / currentPrice;
       return {
         action: 'BUY',
-        percentage: '€200',
+        percentage: '30%',
         amount: `€${buyAmount.toFixed(2)}`,
         shares: parseFloat(sharesToBuy.toFixed(2)),
-        reason: `Price down ${Math.abs(priceChange).toFixed(1)}% - strong buy opportunity`
+        reason: `${absChange.toFixed(1)}% ${profitLoss} vs avg cost €${avgBuyPrice.toFixed(2)} - strong discount, add 30% to position`
       };
     } else if (priceChange <= -10) {
-      // -10% → Buy €100 worth
-      const buyAmount = 100;
+      // -10% loss → Buy 15% more shares (proportional to position size)
+      const currentPositionValue = quantity * currentPrice;
+      const buyPercentage = 0.15;
+      const buyAmount = currentPositionValue * buyPercentage;
       const sharesToBuy = buyAmount / currentPrice;
       return {
         action: 'BUY',
-        percentage: '€100',
+        percentage: '15%',
         amount: `€${buyAmount.toFixed(2)}`,
         shares: parseFloat(sharesToBuy.toFixed(2)),
-        reason: `Price down ${Math.abs(priceChange).toFixed(1)}% - average down`
+        reason: `${absChange.toFixed(1)}% ${profitLoss} vs avg cost €${avgBuyPrice.toFixed(2)} - discount, add 15% to position`
       };
     } else {
       return {
@@ -298,7 +358,123 @@ export class StockPriceService {
         percentage: '0%',
         amount: '€0',
         shares: 0,
-        reason: `Price within normal range (${priceChange > 0 ? '+' : ''}${priceChange.toFixed(1)}%)`
+        reason: `${priceChange > 0 ? '+' : ''}${priceChange.toFixed(1)}% vs avg cost €${avgBuyPrice.toFixed(2)} - within threshold`
+      };
+    }
+  }
+
+  /**
+   * Rule of 40 Calculation
+   * Evaluates company health: Revenue Growth % + Profit Margin % >= 40
+   */
+  async calculateRuleOf40(symbol: string): Promise<{
+    revenue_growth_percent: number | null;
+    profit_margin_percent: number | null;
+    margin_type_used: string;
+    rule_of_40_score: number | null;
+    result: 'PASS' | 'FAIL' | 'INSUFFICIENT_DATA';
+    classification?: 'EXCELLENT' | 'PASS' | 'WEAK' | 'POOR';
+  }> {
+    try {
+      console.log(`Calculating Rule of 40 for ${symbol}`);
+
+      // Fetch financial metrics from Finnhub
+      const url = `${this.FINNHUB_API}/stock/metric`;
+
+      const response = await axios.get(url, {
+        params: {
+          symbol: symbol,
+          metric: 'all',
+          token: this.FINNHUB_API_KEY
+        },
+        timeout: 10000
+      });
+
+      const data = response.data;
+      const metric = data?.metric;
+
+      if (!metric) {
+        console.log(`No financial data available for ${symbol}`);
+        return {
+          revenue_growth_percent: null,
+          profit_margin_percent: null,
+          margin_type_used: 'N/A',
+          rule_of_40_score: null,
+          result: 'INSUFFICIENT_DATA'
+        };
+      }
+
+      // Get revenue growth (year-over-year) - already in percentage
+      let revenueGrowth: number | null = null;
+      if (metric.revenueGrowthTTM !== undefined && metric.revenueGrowthTTM !== null) {
+        revenueGrowth = metric.revenueGrowthTTM;
+      } else if (metric.revenueGrowthQuarterlyYoy !== undefined && metric.revenueGrowthQuarterlyYoy !== null) {
+        revenueGrowth = metric.revenueGrowthQuarterlyYoy;
+      }
+
+      // Get profit margin (preferably Operating, then Net Profit, then Gross)
+      let profitMargin: number | null = null;
+      let marginType = 'N/A';
+
+      if (metric.operatingMarginTTM !== undefined && metric.operatingMarginTTM !== null) {
+        profitMargin = metric.operatingMarginTTM;
+        marginType = 'Operating';
+      } else if (metric.netProfitMarginTTM !== undefined && metric.netProfitMarginTTM !== null) {
+        profitMargin = metric.netProfitMarginTTM;
+        marginType = 'Net Profit';
+      } else if (metric.grossMarginTTM !== undefined && metric.grossMarginTTM !== null) {
+        profitMargin = metric.grossMarginTTM;
+        marginType = 'Gross';
+      }
+
+      // Validate data
+      if (revenueGrowth === null || profitMargin === null) {
+        console.log(`Insufficient data for ${symbol}: Growth=${revenueGrowth}, Margin=${profitMargin}`);
+        return {
+          revenue_growth_percent: revenueGrowth,
+          profit_margin_percent: profitMargin,
+          margin_type_used: marginType,
+          rule_of_40_score: null,
+          result: 'INSUFFICIENT_DATA'
+        };
+      }
+
+      // Calculate Rule of 40 Score
+      const score = revenueGrowth + profitMargin;
+
+      // Determine result
+      const result = score >= 40 ? 'PASS' : 'FAIL';
+
+      // Determine classification
+      let classification: 'EXCELLENT' | 'PASS' | 'WEAK' | 'POOR';
+      if (score >= 60) {
+        classification = 'EXCELLENT';
+      } else if (score >= 40) {
+        classification = 'PASS';
+      } else if (score >= 20) {
+        classification = 'WEAK';
+      } else {
+        classification = 'POOR';
+      }
+
+      console.log(`Rule of 40 for ${symbol}: Score=${score.toFixed(1)}, Result=${result}`);
+
+      return {
+        revenue_growth_percent: Math.round(revenueGrowth * 10) / 10,
+        profit_margin_percent: Math.round(profitMargin * 10) / 10,
+        margin_type_used: marginType,
+        rule_of_40_score: Math.round(score * 10) / 10,
+        result,
+        classification
+      };
+    } catch (error: any) {
+      console.error(`Error calculating Rule of 40 for ${symbol}:`, error.response?.data || error.message);
+      return {
+        revenue_growth_percent: null,
+        profit_margin_percent: null,
+        margin_type_used: 'N/A',
+        rule_of_40_score: null,
+        result: 'INSUFFICIENT_DATA'
       };
     }
   }

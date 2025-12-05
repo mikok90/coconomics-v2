@@ -2,6 +2,11 @@
 
 import { useState, useEffect } from 'react';
 import axios from 'axios';
+import { useAuth } from './auth-context';
+import { useRouter } from 'next/navigation';
+import LoadingSpinner, { FullPageLoader, InlineLoader } from './components/LoadingSpinner';
+import TransactionHistory from './components/TransactionHistory';
+import PortfolioPerformanceChart from './components/PortfolioPerformanceChart';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
@@ -36,18 +41,40 @@ interface HoverData {
 type Timeframe = '1d' | '5d' | '1mo' | '3mo' | '6mo' | '1y' | '5y';
 
 export default function PortfolioPage() {
+  const { isAuthenticated, isLoading: authLoading, logout, token } = useAuth();
+  const router = useRouter();
+
+  // Redirect to login if not authenticated
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) {
+      router.push('/login');
+    }
+  }, [authLoading, isAuthenticated, router]);
+
+  // Helper to get axios config with Authorization header
+  const getAuthHeaders = () => ({
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  });
+
   const [portfolioId] = useState(1);
   const [positions, setPositions] = useState<Position[]>([]);
   const [rebalanceActions, setRebalanceActions] = useState<RebalanceAction[]>([]);
   const [totalValue, setTotalValue] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [showAddPosition, setShowAddPosition] = useState(false);
+  const [showSellPosition, setShowSellPosition] = useState(false);
+  const [showTransactionHistory, setShowTransactionHistory] = useState(false);
+  const [selectedPosition, setSelectedPosition] = useState<Position | null>(null);
   const [optimization, setOptimization] = useState<any>(null);
   const [recommendations, setRecommendations] = useState<Record<string, any>>({});
   const [miniCharts, setMiniCharts] = useState<MiniChart>({});
   const [selectedTimeframes, setSelectedTimeframes] = useState<Record<string, Timeframe>>({});
   const [hoverData, setHoverData] = useState<HoverData>({});
   const [rebalancingAlgos, setRebalancingAlgos] = useState<Record<string, any>>({});
+  const [ruleOf40Data, setRuleOf40Data] = useState<Record<string, any>>({});
 
   // Form state
   const [newPosition, setNewPosition] = useState({
@@ -55,6 +82,8 @@ export default function PortfolioPage() {
     quantity: '',
     avgBuyPrice: ''
   });
+
+  const [sellQuantity, setSellQuantity] = useState('');
 
   useEffect(() => {
     loadPortfolio();
@@ -74,7 +103,7 @@ export default function PortfolioPage() {
   const loadPortfolio = async () => {
     try {
       // Fetch positions with live prices from Finnhub
-      const response = await axios.get(`${API_URL}/portfolio/${portfolioId}/live-prices`);
+      const response = await axios.get(`${API_URL}/portfolio/me/live-prices`, getAuthHeaders());
       setPositions(response.data);
 
       const total = response.data.reduce((sum: number, pos: Position) => {
@@ -83,12 +112,14 @@ export default function PortfolioPage() {
       setTotalValue(total);
     } catch (error) {
       console.error('Error loading portfolio:', error);
+    } finally {
+      setInitialLoading(false);
     }
   };
 
   const updateLivePrices = async () => {
     try {
-      const response = await axios.get(`${API_URL}/portfolio/${portfolioId}/live-prices`);
+      const response = await axios.get(`${API_URL}/portfolio/me/live-prices`, getAuthHeaders());
       setPositions(response.data);
       
       // Calculate total value from all positions
@@ -104,18 +135,24 @@ export default function PortfolioPage() {
   const loadRecommendations = async () => {
     const recs: Record<string, any> = {};
     const algos: Record<string, any> = {};
-    
+    const ruleOf40: Record<string, any> = {};
+
     for (const position of positions) {
       try {
         // Load rebalancing algorithms
-        const rebalancingResponse = await axios.get(`${API_URL}/portfolio/position/${position.id}/rebalancing`);
+        const rebalancingResponse = await axios.get(`${API_URL}/portfolio/position/${position.id}/rebalancing`, getAuthHeaders());
         algos[position.asset.symbol] = rebalancingResponse.data;
+
+        // Load Rule of 40 data
+        const ruleOf40Response = await axios.get(`${API_URL}/portfolio/stock/${position.asset.symbol}/rule-of-40`, getAuthHeaders());
+        ruleOf40[position.asset.symbol] = ruleOf40Response.data;
       } catch (error) {
         console.error(`Error loading algorithms for ${position.asset.symbol}`);
       }
     }
-    
+
     setRebalancingAlgos(algos);
+    setRuleOf40Data(ruleOf40);
   };
 
   const loadAllMiniCharts = async () => {
@@ -124,7 +161,8 @@ export default function PortfolioPage() {
       try {
         const timeframe = selectedTimeframes[position.asset.symbol] || '1d';
         const response = await axios.get(`${API_URL}/portfolio/stock/${position.asset.symbol}/chart`, {
-          params: { range: timeframe }
+          params: { range: timeframe },
+          ...getAuthHeaders()
         });
 
         if (response.data && response.data.prices && response.data.prices.length > 0) {
@@ -147,7 +185,8 @@ export default function PortfolioPage() {
     setSelectedTimeframes(prev => ({ ...prev, [symbol]: timeframe }));
     try {
       const response = await axios.get(`${API_URL}/portfolio/stock/${symbol}/chart`, {
-        params: { range: timeframe }
+        params: { range: timeframe },
+        ...getAuthHeaders()
       });
       setMiniCharts(prev => ({
         ...prev,
@@ -169,11 +208,11 @@ export default function PortfolioPage() {
 
     setLoading(true);
     try {
-      await axios.post(`${API_URL}/portfolio/${portfolioId}/add-position`, {
+      await axios.post(`${API_URL}/portfolio/me/add-position`, {
         symbol: newPosition.symbol.toUpperCase(),
         quantity: parseFloat(newPosition.quantity),
         avgBuyPrice: parseFloat(newPosition.avgBuyPrice)
-      });
+      }, getAuthHeaders());
 
       setNewPosition({ symbol: '', quantity: '', avgBuyPrice: '' });
       setShowAddPosition(false);
@@ -186,26 +225,60 @@ export default function PortfolioPage() {
     }
   };
 
-  const deletePosition = async (positionId: number) => {
-    if (!confirm('Remove this position from portfolio?')) {
+  const openSellModal = (position: Position) => {
+    setSelectedPosition(position);
+    setSellQuantity('');
+    setShowSellPosition(true);
+  };
+
+  const sellShares = async () => {
+    if (!selectedPosition || !sellQuantity) {
+      alert('Please enter quantity to sell');
       return;
     }
 
+    const quantityToSell = parseFloat(sellQuantity);
+
+    if (quantityToSell <= 0) {
+      alert('Quantity must be greater than 0');
+      return;
+    }
+
+    if (quantityToSell > selectedPosition.quantity) {
+      alert(`You only have ${selectedPosition.quantity} shares`);
+      return;
+    }
+
+    setLoading(true);
     try {
-      await axios.delete(`${API_URL}/portfolio/position/${positionId}`);
+      // If selling all shares, delete the position entirely
+      if (quantityToSell === selectedPosition.quantity) {
+        await axios.delete(`${API_URL}/portfolio/position/${selectedPosition.id}`, getAuthHeaders());
+      } else {
+        // Otherwise, reduce the quantity
+        await axios.post(`${API_URL}/portfolio/position/${selectedPosition.id}/sell`, {
+          quantity: quantityToSell
+        }, getAuthHeaders());
+      }
+
+      setShowSellPosition(false);
+      setSellQuantity('');
+      setSelectedPosition(null);
       await loadPortfolio();
     } catch (error) {
-      console.error('Error deleting position:', error);
-      alert('Error removing position');
+      console.error('Error selling shares:', error);
+      alert('Error selling shares');
+    } finally {
+      setLoading(false);
     }
   };
 
   const runOptimization = async () => {
     setLoading(true);
     try {
-      const response = await axios.post(`${API_URL}/portfolio/${portfolioId}/optimize`, {
+      const response = await axios.post(`${API_URL}/portfolio/me/optimize`, {
         riskFreeRate: 0.02
-      });
+      }, getAuthHeaders());
       
       setOptimization(response.data.optimization);
       setPositions(response.data.positions);
@@ -221,7 +294,7 @@ export default function PortfolioPage() {
   const calculateRebalancing = async () => {
     setLoading(true);
     try {
-      const response = await axios.post(`${API_URL}/portfolio/${portfolioId}/rebalance`);
+      const response = await axios.post(`${API_URL}/portfolio/me/rebalance`, {}, getAuthHeaders());
       setRebalanceActions(response.data);
     } catch (error: any) {
       console.error('Error calculating rebalancing:', error);
@@ -250,12 +323,40 @@ export default function PortfolioPage() {
     }, 0);
   };
 
+  // Show loading while checking authentication
+  if (authLoading) {
+    return <FullPageLoader />;
+  }
+
+  // Don't render if not authenticated (will redirect)
+  if (!isAuthenticated) {
+    return null;
+  }
+
   return (
     <div className="min-h-screen bg-black text-white pb-24 overflow-x-hidden w-full max-w-full">
       {/* Header */}
       <div className="px-6 pt-8 pb-4">
-        <p className="text-gray-500 text-sm">Portfolio</p>
-        <h1 className="text-2xl font-semibold mt-1">Coconomics</h1>
+        <div className="flex justify-between items-center">
+          <div>
+            <p className="text-gray-500 text-sm">Portfolio</p>
+            <h1 className="text-2xl font-semibold mt-1">Coconomics</h1>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowTransactionHistory(true)}
+              className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 border border-white/10 rounded-xl text-sm font-medium transition-colors"
+            >
+              History
+            </button>
+            <button
+              onClick={logout}
+              className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 border border-white/10 rounded-xl text-sm font-medium transition-colors"
+            >
+              Logout
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Total Value Card */}
@@ -263,19 +364,22 @@ export default function PortfolioPage() {
         <div className="bg-gradient-to-br from-cyan-500 to-blue-600 rounded-3xl p-8 shadow-2xl">
           <p className="text-cyan-100 text-sm mb-2 opacity-90">Current Value</p>
           <h2 className="text-5xl font-bold tracking-tight">{formatCurrency(totalValue)}</h2>
-          {positions.length > 0 && (
-            <div className="mt-6 pt-6 border-t border-white/20">
-              <div className="flex justify-between items-center">
-                <span className="text-cyan-100 text-sm opacity-90">Total Profit/Loss</span>
-                <span className={`text-2xl font-bold ${
-                  calculateTotalProfitLoss() >= 0 ? 'text-green-300' : 'text-red-300'
-                }`}>
-                  {calculateTotalProfitLoss() >= 0 ? '+' : ''}{formatCurrency(calculateTotalProfitLoss())}
-                </span>
-              </div>
+          <div className="mt-6 pt-6 border-t border-white/20">
+            <div className="flex justify-between items-center">
+              <span className="text-cyan-100 text-sm opacity-90">Total Profit/Loss</span>
+              <span className={`text-2xl font-bold ${
+                calculateTotalProfitLoss() >= 0 ? 'text-green-300' : 'text-red-300'
+              }`}>
+                {calculateTotalProfitLoss() >= 0 ? '+' : ''}{formatCurrency(calculateTotalProfitLoss())}
+              </span>
             </div>
-          )}
+          </div>
         </div>
+      </div>
+
+      {/* Portfolio Performance Chart */}
+      <div className="px-6 pb-6">
+        <PortfolioPerformanceChart token={token} />
       </div>
 
       {/* Action Buttons */}
@@ -306,7 +410,9 @@ export default function PortfolioPage() {
             </div>
           )}
         </div>
-        {positions.length === 0 ? (
+        {initialLoading ? (
+          <InlineLoader message="Loading your portfolio..." />
+        ) : positions.length === 0 ? (
           <div className="bg-white/5 backdrop-blur-xl rounded-3xl p-8 text-center border border-white/10">
             <p className="text-gray-500">No positions yet</p>
             <p className="text-gray-600 text-sm mt-1">Add your first stock to start</p>
@@ -349,10 +455,10 @@ export default function PortfolioPage() {
                       )}
                     </div>
                     <button
-                      onClick={() => deletePosition(position.id)}
+                      onClick={() => openSellModal(position)}
                       className="text-red-400 text-sm hover:text-red-300"
                     >
-                      Remove
+                      Sell
                     </button>
                   </div>
 
@@ -700,6 +806,51 @@ export default function PortfolioPage() {
                     <span>Now €{currentPrice.toFixed(2)}</span>
                   </div>
 
+                  {/* RULE OF 40 */}
+                  {ruleOf40Data[position.asset.symbol] && ruleOf40Data[position.asset.symbol].result !== 'INSUFFICIENT_DATA' && (
+                    <div className="pt-3 border-t border-zinc-800">
+                      <div className="bg-zinc-800/50 rounded-lg p-3 border border-zinc-700 mb-2">
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="text-xs font-semibold text-white">Rule of 40</h4>
+                          <span className={`px-2 py-0.5 rounded text-xs font-bold ${
+                            ruleOf40Data[position.asset.symbol].classification === 'EXCELLENT' ? 'bg-green-600 text-white' :
+                            ruleOf40Data[position.asset.symbol].result === 'PASS' ? 'bg-green-600 text-white' :
+                            ruleOf40Data[position.asset.symbol].classification === 'WEAK' ? 'bg-yellow-600 text-white' :
+                            'bg-red-600 text-white'
+                          }`}>
+                            {ruleOf40Data[position.asset.symbol].classification || ruleOf40Data[position.asset.symbol].result}
+                          </span>
+                        </div>
+                        <div className="space-y-1">
+                          <div className="flex justify-between items-center text-xs">
+                            <span className="text-gray-400">Score</span>
+                            <span className="font-bold text-white">
+                              {ruleOf40Data[position.asset.symbol].rule_of_40_score?.toFixed(1)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center text-xs">
+                            <span className="text-gray-400">Revenue Growth</span>
+                            <span className={`font-semibold ${
+                              ruleOf40Data[position.asset.symbol].revenue_growth_percent >= 0 ? 'text-green-400' : 'text-red-400'
+                            }`}>
+                              {ruleOf40Data[position.asset.symbol].revenue_growth_percent >= 0 ? '+' : ''}
+                              {ruleOf40Data[position.asset.symbol].revenue_growth_percent?.toFixed(1)}%
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center text-xs">
+                            <span className="text-gray-400">{ruleOf40Data[position.asset.symbol].margin_type_used} Margin</span>
+                            <span className={`font-semibold ${
+                              ruleOf40Data[position.asset.symbol].profit_margin_percent >= 0 ? 'text-green-400' : 'text-red-400'
+                            }`}>
+                              {ruleOf40Data[position.asset.symbol].profit_margin_percent >= 0 ? '+' : ''}
+                              {ruleOf40Data[position.asset.symbol].profit_margin_percent?.toFixed(1)}%
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {/* REBALANCING ALGORITHMS */}
                   {rebalancingAlgos[position.asset.symbol] && (
                     <div className="space-y-2 pt-3 border-t border-zinc-800">
@@ -788,9 +939,9 @@ export default function PortfolioPage() {
             <div className="p-6">
               {/* Handle bar */}
               <div className="w-12 h-1 bg-gray-700 rounded-full mx-auto mb-6"></div>
-              
+
               <h3 className="text-2xl font-semibold mb-6">Add Position</h3>
-              
+
               <div className="space-y-4">
                 <div>
                   <label className="text-gray-500 text-xs font-medium mb-2 block">SYMBOL</label>
@@ -802,7 +953,7 @@ export default function PortfolioPage() {
                     className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-4 text-white placeholder-gray-600 focus:outline-none focus:border-cyan-500 transition-colors"
                   />
                 </div>
-                
+
                 <div>
                   <label className="text-gray-500 text-xs font-medium mb-2 block">QUANTITY</label>
                   <input
@@ -813,7 +964,7 @@ export default function PortfolioPage() {
                     className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-4 text-white placeholder-gray-600 focus:outline-none focus:border-cyan-500 transition-colors"
                   />
                 </div>
-                
+
                 <div>
                   <label className="text-gray-500 text-xs font-medium mb-2 block">AVERAGE PRICE</label>
                   <input
@@ -825,7 +976,7 @@ export default function PortfolioPage() {
                   />
                 </div>
               </div>
-              
+
               <div className="flex gap-3 mt-8 pb-2">
                 <button
                   onClick={() => setShowAddPosition(false)}
@@ -836,14 +987,91 @@ export default function PortfolioPage() {
                 <button
                   onClick={addPosition}
                   disabled={loading}
-                  className="flex-1 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 rounded-2xl py-4 font-semibold transition-all disabled:opacity-50"
+                  className="flex-1 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 rounded-2xl py-4 font-semibold transition-all disabled:opacity-50 flex items-center justify-center gap-2"
                 >
+                  {loading && <LoadingSpinner size="sm" color="white" />}
                   {loading ? 'Adding...' : 'Add Position'}
                 </button>
               </div>
             </div>
           </div>
         </div>
+      )}
+
+      {/* Sell Shares Modal */}
+      {showSellPosition && selectedPosition && (
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-end justify-center z-50 animate-in fade-in duration-200">
+          <div className="bg-zinc-900 rounded-t-3xl w-full max-w-md border-t border-white/10 animate-in slide-in-from-bottom duration-300">
+            <div className="p-6">
+              {/* Handle bar */}
+              <div className="w-12 h-1 bg-gray-700 rounded-full mx-auto mb-6"></div>
+
+              <h3 className="text-2xl font-semibold mb-2">Sell {selectedPosition.asset.symbol}</h3>
+              <p className="text-gray-400 text-sm mb-6">You own {selectedPosition.quantity} shares</p>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="text-gray-500 text-xs font-medium mb-2 block">QUANTITY TO SELL</label>
+                  <input
+                    type="number"
+                    placeholder={`Max: ${selectedPosition.quantity}`}
+                    value={sellQuantity}
+                    onChange={(e) => setSellQuantity(e.target.value)}
+                    max={selectedPosition.quantity}
+                    step="0.01"
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-4 text-white placeholder-gray-600 focus:outline-none focus:border-red-500 transition-colors"
+                  />
+                </div>
+
+                {sellQuantity && parseFloat(sellQuantity) > 0 && (
+                  <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+                    <div className="flex justify-between text-sm mb-2">
+                      <span className="text-gray-400">Selling:</span>
+                      <span className="text-white font-semibold">{parseFloat(sellQuantity)} shares</span>
+                    </div>
+                    <div className="flex justify-between text-sm mb-2">
+                      <span className="text-gray-400">At price:</span>
+                      <span className="text-white font-semibold">€{selectedPosition.currentPrice.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm pt-2 border-t border-white/10">
+                      <span className="text-gray-400">Total value:</span>
+                      <span className="text-white font-bold">{formatCurrency(parseFloat(sellQuantity) * selectedPosition.currentPrice)}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex gap-3 mt-8 pb-2">
+                <button
+                  onClick={() => {
+                    setShowSellPosition(false);
+                    setSelectedPosition(null);
+                    setSellQuantity('');
+                  }}
+                  className="flex-1 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl py-4 font-medium transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={sellShares}
+                  disabled={loading}
+                  className="flex-1 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 rounded-2xl py-4 font-semibold transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {loading && <LoadingSpinner size="sm" color="white" />}
+                  {loading ? 'Selling...' : 'Sell Shares'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Transaction History Modal */}
+      {showTransactionHistory && (
+        <TransactionHistory
+          token={token}
+          onClose={() => setShowTransactionHistory(false)}
+        />
       )}
     </div>
   );

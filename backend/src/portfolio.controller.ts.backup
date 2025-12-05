@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, UseGuards, Query, Delete } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, UseGuards, Query, Delete, Request } from '@nestjs/common';
 import { PortfolioService } from './portfolio.service';
 import { StockPriceService } from './stock-price.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
@@ -12,28 +12,19 @@ export class PortfolioController {
     private readonly stockPriceService: StockPriceService
   ) {}
 
-  // Helper method to get portfolio ID for authenticated user
-  private async getPortfolioId(userId: number): Promise<number> {
-    const portfolio = await this.portfolioService.getPortfolioByUser(userId);
-    return portfolio.id;
-  }
-
   @Get('me')
   async getPortfolio(@User() user: any) {
-    const portfolioId = await this.getPortfolioId(user.id);
-    return this.portfolioService.getPortfolio(portfolioId);
+    return this.portfolioService.getPortfolioByUser(user.id);
   }
 
-  @Get('me/positions')
-  async getPositions(@User() user: any) {
-    const portfolioId = await this.getPortfolioId(user.id);
-    return this.portfolioService.getPositions(portfolioId);
+  @Get(':id/positions')
+  async getPositions(@Param('id') id: number) {
+    return this.portfolioService.getPositions(id);
   }
 
-  @Get('me/live-prices')
-  async getLivePrices(@User() user: any) {
-    const portfolioId = await this.getPortfolioId(user.id);
-    return this.portfolioService.updateLivePrices(portfolioId);
+  @Get(':id/live-prices')
+  async getLivePrices(@Param('id') id: number) {
+    return this.portfolioService.updateLivePrices(id);
   }
 
   @Get('stock/:symbol/quote')
@@ -85,70 +76,65 @@ export class PortfolioController {
     }
   }
 
-  @Post('me/optimize')
+  @Post(':id/optimize')
   async optimizePortfolio(
-    @User() user: any,
+    @Param('id') id: number,
     @Body() body: { riskFreeRate?: number }
   ) {
-    const portfolioId = await this.getPortfolioId(user.id);
-    return this.portfolioService.optimizePortfolio(portfolioId, body.riskFreeRate);
+    return this.portfolioService.optimizePortfolio(id, body.riskFreeRate);
   }
 
-  @Post('me/rebalance')
-  async calculateRebalancing(@User() user: any) {
-    const portfolioId = await this.getPortfolioId(user.id);
-    return this.portfolioService.calculateRebalancing(portfolioId);
+  @Post(':id/rebalance')
+  async calculateRebalancing(@Param('id') id: number) {
+    return this.portfolioService.calculateRebalancing(id);
   }
 
-  @Post('me/execute-rebalance')
+  @Post(':id/execute-rebalance')
   async executeRebalancing(
-    @User() user: any,
+    @Param('id') id: number,
     @Body() body: { actions: any[] }
   ) {
-    const portfolioId = await this.getPortfolioId(user.id);
-    return this.portfolioService.executeRebalancing(portfolioId, body.actions);
+    return this.portfolioService.executeRebalancing(id, body.actions);
   }
 
-  @Get('me/history')
-  async getRebalanceHistory(@User() user: any) {
-    const portfolioId = await this.getPortfolioId(user.id);
-    return this.portfolioService.getRebalanceHistory(portfolioId);
+  @Get(':id/history')
+  async getRebalanceHistory(@Param('id') id: number) {
+    return this.portfolioService.getRebalanceHistory(id);
   }
 
   @Get('position/:id/rebalancing')
   async getRebalancingRecommendations(@Param('id') id: number) {
     const position = await this.portfolioService.getPosition(id);
-
+    
     const valueAveraging = this.stockPriceService.calculateValueAveraging(
       parseFloat(position.quantity.toString()),
       parseFloat(position.avgBuyPrice.toString()),
       parseFloat(position.currentPrice.toString()),
       1 // months since start
     );
-
+    
     const thresholdRebalancing = this.stockPriceService.calculateThresholdRebalancing(
       parseFloat(position.quantity.toString()),
       parseFloat(position.avgBuyPrice.toString()),
       parseFloat(position.currentPrice.toString())
     );
-
+    
     return {
       valueAveraging,
       thresholdRebalancing
     };
   }
 
-  @Post('me/add-position')
+  @Post(':id/add-position')
   async addPosition(
-    @User() user: any,
+    @Param('id') id: number,
     @Body() body: {
       symbol: string;
       quantity: number;
       avgBuyPrice: number;
     }
   ) {
-    const portfolioId = await this.getPortfolioId(user.id);
-    return this.portfolioService.addPosition(portfolioId, body);
+    return this.portfolioService.addPosition(id, body);
   }
 
   @Delete('position/:id')
@@ -164,57 +150,37 @@ export class PortfolioController {
     return this.portfolioService.sellShares(id, body.quantity);
   }
 
-  @Post('me/update-prices')
-  async updatePrices(@User() user: any) {
-    const portfolioId = await this.getPortfolioId(user.id);
-    return this.portfolioService.updateCurrentPrices(portfolioId);
+  @Post(':id/update-prices')
+  async updatePrices(@Param('id') id: number) {
+    return this.portfolioService.updateCurrentPrices(id);
   }
 
-  @Post('me/deposit')
+  @Post(':id/deposit')
   async depositCash(
-    @User() user: any,
+    @Param('id') id: number,
     @Body() body: { amount: number; notes?: string }
   ) {
-    const portfolioId = await this.getPortfolioId(user.id);
-    return this.portfolioService.depositCash(portfolioId, body.amount, body.notes);
+    return this.portfolioService.depositCash(id, body.amount, body.notes);
   }
 
-  @Post('me/withdraw')
+  @Post(':id/withdraw')
   async withdrawCash(
-    @User() user: any,
+    @Param('id') id: number,
     @Body() body: { amount: number; notes?: string }
   ) {
-    const portfolioId = await this.getPortfolioId(user.id);
-    return this.portfolioService.withdrawCash(portfolioId, body.amount, body.notes);
+    return this.portfolioService.withdrawCash(id, body.amount, body.notes);
   }
 
-  @Get('me/transactions')
+  @Get(':id/transactions')
   async getTransactions(
-    @User() user: any,
+    @Param('id') id: number,
     @Query('limit') limit?: number
   ) {
-    const portfolioId = await this.getPortfolioId(user.id);
-    return this.portfolioService.getTransactions(portfolioId, limit);
+    return this.portfolioService.getTransactions(id, limit);
   }
 
-  @Delete('me/transactions')
-  async deleteAllTransactions(@User() user: any) {
-    const portfolioId = await this.getPortfolioId(user.id);
-    return this.portfolioService.deleteAllTransactions(portfolioId);
-  }
-
-  @Post('me/snapshot')
-  async createSnapshot(@User() user: any) {
-    const portfolioId = await this.getPortfolioId(user.id);
-    return this.portfolioService.createSnapshot(portfolioId);
-  }
-
-  @Get('me/performance')
-  async getPerformance(
-    @User() user: any,
-    @Query('days') days?: number
-  ) {
-    const portfolioId = await this.getPortfolioId(user.id);
-    return this.portfolioService.getPerformanceData(portfolioId, days || 30);
+  @Delete(':id/transactions')
+  async deleteAllTransactions(@Param('id') id: number) {
+    return this.portfolioService.deleteAllTransactions(id);
   }
 }

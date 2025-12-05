@@ -31,7 +31,9 @@
   },
   "devDependencies": {
     "@nestjs/cli": "^10.0.0",
+    "@types/bcrypt": "^5.0.0",
     "@types/node": "^20.0.0",
+    "@types/passport-jwt": "^3.0.9",
     "typescript": "^5.0.0"
   }
 }

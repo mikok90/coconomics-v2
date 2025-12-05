@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Portfolio, Position, Asset, PriceHistory, RebalanceHistory, OptimizationResult } from './entities';
+import { Portfolio, Position, Asset, PriceHistory, RebalanceHistory, OptimizationResult, Transaction, PortfolioSnapshot } from './entities';
 import { PortfolioOptimizationService } from './portfolio-optimization.service';
 import { StockPriceService } from './stock-price.service';
 
@@ -20,6 +20,10 @@ export class PortfolioService {
     private rebalanceHistoryRepo: Repository<RebalanceHistory>,
     @InjectRepository(OptimizationResult)
     private optimizationResultRepo: Repository<OptimizationResult>,
+    @InjectRepository(Transaction)
+    private transactionRepo: Repository<Transaction>,
+    @InjectRepository(PortfolioSnapshot)
+    private snapshotRepo: Repository<PortfolioSnapshot>,
     private optimizationService: PortfolioOptimizationService,
     private stockPriceService: StockPriceService
   ) {}
@@ -35,6 +39,22 @@ export class PortfolioService {
 
     if (!portfolio) {
       throw new NotFoundException('Portfolio not found');
+    }
+
+    return portfolio;
+  }
+
+  /**
+   * Get portfolio by user ID
+   */
+  async getPortfolioByUser(userId: number) {
+    const portfolio = await this.portfolioRepo.findOne({
+      where: { userId },
+      relations: ['positions', 'positions.asset']
+    });
+
+    if (!portfolio) {
+      throw new NotFoundException('Portfolio not found for user');
     }
 
     return portfolio;
@@ -118,11 +138,11 @@ export class PortfolioService {
       const newQty = parseFloat(data.quantity.toString());
       const newAvg = parseFloat(data.avgBuyPrice.toString());
 
-      const totalCost = (oldQty * oldAvg) + (newQty * newAvg);
+      const totalCostCalc = (oldQty * oldAvg) + (newQty * newAvg);
       const totalQuantity = oldQty + newQty;
 
       position.quantity = totalQuantity;
-      position.avgBuyPrice = totalCost / totalQuantity;
+      position.avgBuyPrice = totalCostCalc / totalQuantity;
       position.currentPrice = currentPrice; // Update with live price
       position.lastUpdated = new Date();
     } else {
@@ -139,6 +159,25 @@ export class PortfolioService {
 
     await this.positionRepo.save(position);
     await this.updatePortfolioWeights(portfolioId);
+
+    // Record BUY transaction
+    const portfolio = await this.portfolioRepo.findOne({ where: { id: portfolioId } });
+    const totalCost = data.quantity * data.avgBuyPrice;
+    const currentCash = parseFloat(portfolio.cashBalance.toString());
+    const newCash = currentCash - totalCost;
+    portfolio.cashBalance = newCash;
+    await this.portfolioRepo.save(portfolio);
+
+    await this.recordTransaction(
+      portfolioId,
+      'BUY',
+      totalCost,
+      newCash,
+      data.symbol,
+      data.quantity,
+      data.avgBuyPrice,
+      `Bought ${data.quantity} shares of ${data.symbol} at $${data.avgBuyPrice.toFixed(2)}`
+    );
 
     // Return position with asset info
     return this.positionRepo.findOne({
@@ -164,6 +203,93 @@ export class PortfolioService {
     await this.updatePortfolioWeights(portfolioId);
 
     return { message: 'Position deleted successfully' };
+  }
+
+  /**
+   * Sell shares from a position
+   */
+  async sellShares(positionId: number, quantityToSell: number) {
+    const position = await this.positionRepo.findOne({
+      where: { id: positionId },
+      relations: ['asset']
+    });
+
+    if (!position) {
+      throw new NotFoundException('Position not found');
+    }
+
+    const currentQuantity = parseFloat(position.quantity.toString());
+
+    if (quantityToSell <= 0) {
+      throw new Error('Quantity to sell must be greater than 0');
+    }
+
+    if (quantityToSell > currentQuantity) {
+      throw new Error(`Cannot sell ${quantityToSell} shares. You only have ${currentQuantity} shares.`);
+    }
+
+    const portfolioId = position.portfolioId;
+
+    // Get portfolio to update cash balance
+    const portfolio = await this.portfolioRepo.findOne({ where: { id: portfolioId } });
+    if (!portfolio) {
+      throw new NotFoundException('Portfolio not found');
+    }
+
+    // Calculate proceeds from sale
+    const currentPrice = parseFloat(position.currentPrice.toString());
+    const proceeds = quantityToSell * currentPrice;
+
+    // Add proceeds to cash balance
+    const currentCash = parseFloat(portfolio.cashBalance.toString());
+    const newCash = currentCash + proceeds;
+    portfolio.cashBalance = newCash;
+    await this.portfolioRepo.save(portfolio);
+
+    // Record SELL transaction
+    await this.recordTransaction(
+      portfolioId,
+      'SELL',
+      proceeds,
+      newCash,
+      position.asset.symbol,
+      quantityToSell,
+      currentPrice,
+      `Sold ${quantityToSell} shares of ${position.asset.symbol} at $${currentPrice.toFixed(2)}`
+    );
+
+    // Calculate remaining quantity
+    const remainingQuantity = currentQuantity - quantityToSell;
+
+    // If position reaches 0 or very close to 0, delete it entirely
+    if (remainingQuantity <= 0.0001) {
+      await this.positionRepo.delete(positionId);
+      await this.updatePortfolioWeights(portfolioId);
+
+      return {
+        message: `All shares sold successfully. Position removed from portfolio. Proceeds: $${proceeds.toFixed(2)}`,
+        position: null,
+        proceeds,
+        cashBalance: newCash
+      };
+    }
+
+    // Otherwise, just reduce the quantity
+    position.quantity = remainingQuantity;
+    position.lastUpdated = new Date();
+
+    await this.positionRepo.save(position);
+    await this.updatePortfolioWeights(portfolioId);
+
+    return {
+      message: `Shares sold successfully. Proceeds: $${proceeds.toFixed(2)}`,
+      position: await this.positionRepo.findOne({
+        where: { id: positionId },
+        relations: ['asset']
+      }),
+      proceeds,
+      cashBalance: newCash
+    };
   }
 
   /**
@@ -395,9 +521,15 @@ export class PortfolioService {
         } else if (action.action === 'SELL') {
           position.quantity -= action.shares;
         }
-        
-        position.currentWeight = action.targetWeight;
-        await this.positionRepo.save(position);
+
+        // If position reaches 0 or very close to 0, delete it
+        const finalQuantity = parseFloat(position.quantity.toString());
+        if (finalQuantity <= 0.0001) {
+          await this.positionRepo.delete(position.id);
+        } else {
+          position.currentWeight = action.targetWeight;
+          await this.positionRepo.save(position);
+        }
       }
     }
 
@@ -479,5 +611,182 @@ export class PortfolioService {
       where: { portfolioId },
       order: { calculatedAt: 'DESC' }
     });
+  }
+
+  /**
+   * Helper: Record a transaction
+   */
+  private async recordTransaction(
+    portfolioId: number,
+    type: string,
+    amount: number,
+    cashBalanceAfter: number,
+    symbol?: string,
+    quantity?: number,
+    price?: number,
+    notes?: string
+  ) {
+    const transaction = this.transactionRepo.create({
+      portfolioId,
+      type,
+      amount,
+      symbol,
+      quantity,
+      price,
+      cashBalanceAfter,
+      notes
+    });
+
+    return this.transactionRepo.save(transaction);
+  }
+
+  /**
+   * Deposit cash to portfolio
+   */
+  async depositCash(portfolioId: number, amount: number, notes?: string) {
+    if (amount <= 0) {
+      throw new Error('Deposit amount must be greater than 0');
+    }
+
+    const portfolio = await this.portfolioRepo.findOne({ where: { id: portfolioId } });
+
+    if (!portfolio) {
+      throw new NotFoundException('Portfolio not found');
+    }
+
+    const currentCash = parseFloat(portfolio.cashBalance.toString());
+    const currentDeposits = parseFloat(portfolio.totalDeposits.toString());
+    const newCash = currentCash + amount;
+    const newDeposits = currentDeposits + amount;
+
+    portfolio.cashBalance = newCash;
+    portfolio.totalDeposits = newDeposits;
+    await this.portfolioRepo.save(portfolio);
+
+    await this.recordTransaction(portfolioId, 'DEPOSIT', amount, newCash, null, null, null, notes);
+
+    return {
+      success: true,
+      cashBalance: newCash,
+      totalDeposits: newDeposits,
+      message: `Deposited $${amount.toFixed(2)}`
+    };
+  }
+
+  /**
+   * Withdraw cash from portfolio
+   */
+  async withdrawCash(portfolioId: number, amount: number, notes?: string) {
+    if (amount <= 0) {
+      throw new Error('Withdrawal amount must be greater than 0');
+    }
+
+    const portfolio = await this.portfolioRepo.findOne({ where: { id: portfolioId } });
+
+    if (!portfolio) {
+      throw new NotFoundException('Portfolio not found');
+    }
+
+    const currentCash = parseFloat(portfolio.cashBalance.toString());
+
+    if (amount > currentCash) {
+      throw new Error(`Insufficient cash. Available: $${currentCash.toFixed(2)}`);
+    }
+
+    const currentWithdrawals = parseFloat(portfolio.totalWithdrawals.toString());
+    const newCash = currentCash - amount;
+    const newWithdrawals = currentWithdrawals + amount;
+
+    portfolio.cashBalance = newCash;
+    portfolio.totalWithdrawals = newWithdrawals;
+    await this.portfolioRepo.save(portfolio);
+
+    await this.recordTransaction(portfolioId, 'WITHDRAWAL', amount, newCash, null, null, null, notes);
+
+    return {
+      success: true,
+      cashBalance: newCash,
+      totalWithdrawals: newWithdrawals,
+      message: `Withdrew $${amount.toFixed(2)}`
+    };
+  }
+
+  /**
+   * Get transaction history
+   */
+  async getTransactions(portfolioId: number, limit: number = 50) {
+    return this.transactionRepo.find({
+      where: { portfolioId },
+      order: { createdAt: 'DESC' },
+      take: limit
+    });
+  }
+
+  /**
+   * Delete all transactions for a portfolio
+   */
+  async deleteAllTransactions(portfolioId: number) {
+    await this.transactionRepo.delete({ portfolioId });
+    return {
+      success: true,
+      message: 'All transactions deleted successfully'
+    };
+  }
+
+  /**
+   * Create a portfolio value snapshot
+   */
+  async createSnapshot(portfolioId: number) {
+    const portfolio = await this.portfolioRepo.findOne({
+      where: { id: portfolioId },
+      relations: ['positions']
+    });
+
+    if (!portfolio) {
+      throw new NotFoundException('Portfolio not found');
+    }
+
+    // Calculate positions value
+    const positions = await this.getPositions(portfolioId);
+    const positionsValue = positions.reduce((sum, pos) => {
+      const qty = parseFloat(pos.quantity.toString());
+      const price = parseFloat(pos.currentPrice?.toString() || '0');
+      return sum + (qty * price);
+    }, 0);
+
+    const cashBalance = parseFloat(portfolio.cashBalance.toString());
+    const totalValue = positionsValue + cashBalance;
+
+    const snapshot = this.snapshotRepo.create({
+      portfolioId,
+      totalValue,
+      cashBalance,
+      positionsValue,
+      snapshotDate: new Date()
+    });
+
+    return this.snapshotRepo.save(snapshot);
+  }
+
+  /**
+   * Get portfolio performance data (value over time)
+   */
+  async getPerformanceData(portfolioId: number, days: number = 30) {
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+
+    const snapshots = await this.snapshotRepo
+      .createQueryBuilder('snapshot')
+      .where('snapshot.portfolio_id = :portfolioId', { portfolioId })
+      .andWhere('snapshot.snapshot_date >= :startDate', { startDate })
+      .orderBy('snapshot.snapshot_date', 'ASC')
+      .getMany();
+
+    return snapshots.map(snapshot => ({
+      date: snapshot.snapshotDate,
+      totalValue: parseFloat(snapshot.totalValue.toString()),
+      cashBalance: parseFloat(snapshot.cashBalance.toString()),
+      positionsValue: parseFloat(snapshot.positionsValue.toString())
+    }));
   }
 }

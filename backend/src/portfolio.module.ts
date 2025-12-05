@@ -4,7 +4,7 @@ import { PortfolioController } from './portfolio.controller';
 import { PortfolioService } from './portfolio.service';
 import { PortfolioOptimizationService } from './portfolio-optimization.service';
 import { StockPriceService } from './stock-price.service';
-import { Portfolio, Position, Asset, PriceHistory, RebalanceHistory, OptimizationResult } from './entities';
+import { Portfolio, Position, Asset, PriceHistory, RebalanceHistory, OptimizationResult, Transaction, PortfolioSnapshot } from './entities';
 
 @Module({
   imports: [
@@ -15,6 +15,8 @@ import { Portfolio, Position, Asset, PriceHistory, RebalanceHistory, Optimizatio
       PriceHistory,
       RebalanceHistory,
       OptimizationResult,
+      Transaction,
+      PortfolioSnapshot,
     ]),
   ],
   controllers: [PortfolioController],
