@@ -110,14 +110,10 @@ export class PortfolioService {
       await this.assetRepo.save(asset);
     }
 
-    // Fetch current live price
-    let currentPrice = data.avgBuyPrice;
-    try {
-      const quote = await this.stockPriceService.getQuote(data.symbol);
-      currentPrice = quote.price;
-    } catch (error) {
-      console.error(`Failed to fetch live price for ${data.symbol}:`, error.message);
-    }
+    // Fetch current live price - this also validates the stock symbol
+    // If stock is invalid, this will throw an error and stop the process
+    const quote = await this.stockPriceService.getQuote(data.symbol);
+    const currentPrice = quote.price;
 
     // Check if position exists
     let position = await this.positionRepo.findOne({
@@ -188,7 +184,8 @@ export class PortfolioService {
    */
   async deletePosition(positionId: number) {
     const position = await this.positionRepo.findOne({
-      where: { id: positionId }
+      where: { id: positionId },
+      relations: ['asset']
     });
 
     if (!position) {
@@ -196,10 +193,27 @@ export class PortfolioService {
     }
 
     const portfolioId = position.portfolioId;
+
+    // Refund the cost of the position back to cash (like it was never purchased)
+    const portfolio = await this.portfolioRepo.findOne({ where: { id: portfolioId } });
+    if (portfolio) {
+      const totalCost = parseFloat(position.quantity.toString()) * parseFloat(position.avgBuyPrice.toString());
+      const currentCash = parseFloat(portfolio.cashBalance.toString());
+      portfolio.cashBalance = currentCash + totalCost; // Refund the money
+      await this.portfolioRepo.save(portfolio);
+    }
+
+    // Delete the position completely (no trace)
     await this.positionRepo.delete(positionId);
     await this.updatePortfolioWeights(portfolioId);
 
-    return { message: 'Position deleted successfully' };
+    // Update portfolio value snapshot (but don't record a transaction - leaves no trace)
+    await this.createSnapshot(portfolioId);
+
+    return {
+      message: 'Position deleted successfully',
+      refundAmount: parseFloat(position.quantity.toString()) * parseFloat(position.avgBuyPrice.toString())
+    };
   }
 
   /**
