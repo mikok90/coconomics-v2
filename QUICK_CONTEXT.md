@@ -1,29 +1,35 @@
 # Quick Context (For Claude)
 
-## Current State ⚠️ CRITICAL ISSUE
-- **Frontend (Vercel):** ✅ WORKING - Shows all changes
-- **Backend (Render):** ❌ STUCK ON OLD COMMIT - Not auto-deploying
+## Current State ✅ RESOLVED
+- **Frontend (Vercel):** ✅ WORKING - All changes deployed
+- **Backend (Render):** ✅ FIXED - New service with correct code
 - Production URL: https://coconomics-v2.vercel.app
-- Backend: https://coconomics-backend.onrender.com
+- Backend: NEW service (coconomics-backend-new.onrender.com or similar)
 - Local dev: Frontend on :3003, Backend on :3001
 
-## 🚨 CRITICAL: Branch Deployment Issue
+## 🎉 Deployment Issue RESOLVED
 
 **THE PROBLEM:**
-- Render is configured to watch the **`main`** branch
-- We were pushing to **`master`** branch (git push origin main:master)
-- Result: Backend stayed on OLD commit (f59afcf from Dec 4)
-- Frontend worked because Vercel watches `master`
+- Old Render service was watching WRONG repository: `coconomics-backend`
+- Our code is in: `coconomics-v2`
+- Result: Render kept deploying ancient code (f59afcf from Dec 4)
 
-**THE FIX ATTEMPTED:**
-- Ran: `git push origin main:main --force` to sync main branch
-- Latest code (00702ce) is now on BOTH main and master branches
-- But Render STILL deploys old commit when manually triggered
+**THE SOLUTION:**
+- Created NEW Render service pointing to correct repo: `coconomics-v2`
+- Configuration:
+  - Repository: `mikok90/coconomics-v2`
+  - Branch: `main`
+  - Root Directory: `backend`
+  - Build Command: `npm install --include=dev && npm run build`
+  - Start Command: `npm run start:prod`
+- Updated Vercel env var `NEXT_PUBLIC_API_URL` to new backend URL
+- Redeployed Vercel without cache to pick up new backend
 
 **CURRENT STATUS:**
-- Backend stuck on: f59afcf (Dec 4) - "Make buy amounts proportional..."
-- Backend SHOULD BE on: 00702ce (Dec 5) - "Fix invalid stock validation..."
-- Need to investigate Render settings or branch configuration
+- ✅ Backend deploys from: coconomics-v2 repo, main branch, commit 7b32fde
+- ✅ Frontend deploys from: coconomics-v2 repo, master branch
+- ✅ Both services connected and working
+- ⏳ User testing invalid stock validation and performance chart
 
 ## Working Directory
 `C:\Users\mike\Downloads\coconomics-deploy`
@@ -108,10 +114,11 @@
   4. May need to manually change commit in Render UI
 
 ## Next Session Tasks
-1. **URGENT:** Fix Render deployment to use commit 00702ce
-2. Test invalid stock validation on production
-3. Test performance chart populates after buy/sell/deposit/withdraw
-4. Implement collapsible/expandable stock cards (deferred)
+1. ✅ DONE: Fixed Render deployment (created new service)
+2. ⏳ TESTING: User testing invalid stock validation on production
+3. ⏳ TESTING: User testing performance chart populates after trades
+4. 🔜 TODO: Implement collapsible/expandable stock cards (deferred)
+5. 🔜 TODO: Consider deleting old Render service (coconomics-backend) once new one confirmed working
 
 ## Quick Links
 - Full details: Read PROJECT_CONTEXT.md
