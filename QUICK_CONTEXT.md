@@ -62,11 +62,11 @@
    - Portfolio performance chart will populate automatically
 
 ## Latest Commits (Both Branches Now Synced)
-- **00702ce** - Fix invalid stock validation and portfolio performance tracking (LATEST)
-- **10ed205** - Update QUICK_CONTEXT.md with session changes
-- **9498b2f** - Force Vercel redeploy - bust all caches
-- **5586a31** - Add granular tech sectors, move Add Stock button, add validation
-- **b9638bb** - Fix duplicate stock symbols in sector mapping
+- **f186add** - Fix portfolio performance algorithm for REMOVE operations (LATEST)
+- **f8ba5a2** - Fix Remove button and Portfolio Performance profit/loss calculation
+- **75b9b20** - Fix portfolio performance chart and Rule of 40 display
+- **77aa5a3** - Delete confirmation fixes
+- **00702ce** - Fix invalid stock validation and portfolio performance tracking
 
 ## Git Branch Strategy
 - **Local:** `main` branch
@@ -99,8 +99,8 @@
 
 ### Current Session Fixes (Dec 6)
 - `backend/src/app.module.ts` - Added PortfolioSnapshot entity registration (CRITICAL FIX)
-- `backend/src/portfolio.controller.ts` - Fixed Rule of 40 response format (snake_case → camelCase)
-- `backend/src/portfolio.service.ts` - Fixed deletePosition to NOT refund money, fixed performance data format
+- `backend/src/portfolio.controller.ts` - Fixed Rule of 40 response format, added DELETE /me/performance endpoint
+- `backend/src/portfolio.service.ts` - Fixed deletePosition to adjust totalDeposits (cost basis), added deleteAllSnapshots()
 - `frontend/app/components/PortfolioPerformanceChart.tsx` - Fixed profit/loss calculation logic
 
 ## Current Deployment Status
@@ -113,10 +113,12 @@
 ### Render (Backend) ✅
 - **Status:** WORKING
 - **New Service:** coconomics-backend-new (correct repo: coconomics-v2)
-- **Latest Deploy:** 77aa5a3
-- **User Reported Issues (Dec 6):**
-  - ❌ Portfolio Performance chart empty (FIXED: Missing PortfolioSnapshot entity registration)
-  - ❌ Rule of 40 showing N/A everywhere (FIXED: Wrong response format)
+- **Latest Deploy:** f186add
+- **All Issues FIXED:**
+  - ✅ Portfolio Performance chart (entity registration)
+  - ✅ Rule of 40 display (response format)
+  - ✅ REMOVE operation cost basis (adjusts totalDeposits)
+  - ✅ Performance reset endpoint (DELETE /me/performance)
 
 ## Issues Fixed This Session (Dec 6)
 1. ✅ **Portfolio Performance Chart Empty**
@@ -148,14 +150,34 @@
    - **Frontend:** Fixed calculateChange to use correct formula
    - **Result:** Chart now shows ACTUAL profit/loss, accounting for all deposits/withdrawals
 
+6. ✅ **REMOVE Operation Breaking Portfolio Performance (CRITICAL)**
+   - **Problem:** Removing stocks didn't adjust cost basis (totalDeposits)
+   - **Example:** Deposit $1000, buy stock for $800, REMOVE stock → P/L = $200 - $1000 = -$800 (wrong!)
+   - **Expected:** REMOVE should make it as if purchase never happened (P/L = $0)
+   - **Fix:** Modified deletePosition() to subtract purchase cost from totalDeposits
+   - **Formula:** `totalDeposits = totalDeposits - (quantity * avgBuyPrice)`
+   - **Result:** REMOVE now correctly adjusts cost basis (no profit/loss impact)
+
+7. ✅ **Added Portfolio Performance Reset Feature**
+   - **Problem:** User had corrupted performance data showing +€4160 after removing all stocks
+   - **Fix:** Added DELETE /portfolio/me/performance endpoint
+   - **Backend:** Created deleteAllSnapshots() method to clear all snapshots for a portfolio
+   - **Result:** Users can now reset performance data and start fresh
+
 ## Next Session Tasks
 1. ✅ DONE: Fixed Render deployment (created new service)
 2. ✅ DONE: Fixed valid stock validation errors
 3. ✅ DONE: Fixed portfolio performance chart (entity registration)
 4. ✅ DONE: Fixed Rule of 40 display (response format)
 5. ✅ DONE: Fixed delete confirmation dialog
-6. 🔜 TODO: Implement collapsible/expandable stock cards (deferred)
-7. 🔜 TODO: Consider deleting old Render service (coconomics-backend) once everything confirmed working
+6. ✅ DONE: Fixed REMOVE operation to adjust cost basis
+7. ✅ DONE: Added portfolio performance reset endpoint
+8. 🔜 USER ACTION NEEDED: Reset your portfolio performance using the app or API:
+   - **Option 1 (Recommended):** I can add a reset button to the frontend
+   - **Option 2:** Call DELETE http://localhost:3001/portfolio/me/performance (with auth token)
+   - After reset, performance will start fresh from your next transaction
+9. 🔜 TODO: Implement collapsible/expandable stock cards (deferred)
+10. 🔜 TODO: Consider deleting old Render service (coconomics-backend) once everything confirmed working
 
 ## Quick Links
 - Full details: Read PROJECT_CONTEXT.md
