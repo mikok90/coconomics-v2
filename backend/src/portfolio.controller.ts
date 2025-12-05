@@ -217,4 +217,10 @@ export class PortfolioController {
     const portfolioId = await this.getPortfolioId(user.id);
     return this.portfolioService.getPerformanceData(portfolioId, days || 30);
   }
+
+  @Delete('me/performance')
+  async resetPerformance(@User() user: any) {
+    const portfolioId = await this.getPortfolioId(user.id);
+    return this.portfolioService.deleteAllSnapshots(portfolioId);
+  }
 }

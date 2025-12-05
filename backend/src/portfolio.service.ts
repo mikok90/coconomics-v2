@@ -185,8 +185,9 @@ export class PortfolioService {
   }
 
   /**
-   * Delete a position - removes stock completely without refunding money
-   * This is for mistakes/errors - the money was already spent and is lost
+   * Delete a position - removes stock completely as if purchase never happened
+   * Adjusts totalDeposits to remove the purchase cost from cost basis
+   * NO CASH REFUND - this just removes the stock from tracking
    * Use sellShares() to get money back at current market price
    */
   async deletePosition(positionId: number) {
@@ -201,7 +202,23 @@ export class PortfolioService {
 
     const portfolioId = position.portfolioId;
 
-    // NO REFUND - money stays gone (user made a mistake, cash was already spent)
+    // Calculate the original purchase cost
+    const quantity = parseFloat(position.quantity.toString());
+    const avgBuyPrice = parseFloat(position.avgBuyPrice.toString());
+    const purchaseCost = quantity * avgBuyPrice;
+
+    // Get portfolio to adjust totalDeposits (cost basis)
+    const portfolio = await this.portfolioRepo.findOne({ where: { id: portfolioId } });
+    if (!portfolio) {
+      throw new NotFoundException('Portfolio not found');
+    }
+
+    // Adjust totalDeposits: remove the purchase cost from cost basis
+    // This makes it as if the purchase never happened (no profit, no loss impact)
+    const currentDeposits = parseFloat(portfolio.totalDeposits.toString());
+    portfolio.totalDeposits = Math.max(0, currentDeposits - purchaseCost);
+    await this.portfolioRepo.save(portfolio);
+
     // Delete the position completely (no trace, no transaction record)
     await this.positionRepo.delete(positionId);
     await this.updatePortfolioWeights(portfolioId);
@@ -215,9 +232,10 @@ export class PortfolioService {
     }
 
     return {
-      message: 'Position removed successfully - no refund (use Sell to get money back)',
+      message: 'Position removed - purchase cost removed from cost basis (no profit/loss impact)',
       removedSymbol: position.asset.symbol,
-      removedQuantity: parseFloat(position.quantity.toString())
+      removedQuantity: quantity,
+      purchaseCostRemoved: purchaseCost
     };
   }
 
@@ -843,6 +861,24 @@ export class PortfolioService {
       })),
       totalDeposits: portfolio ? parseFloat(portfolio.totalDeposits.toString()) : 0,
       totalWithdrawals: portfolio ? parseFloat(portfolio.totalWithdrawals.toString()) : 0
+    };
+  }
+
+  /**
+   * Delete all portfolio snapshots (reset performance data)
+   * Use this to clear corrupted performance data and start fresh
+   */
+  async deleteAllSnapshots(portfolioId: number) {
+    const result = await this.snapshotRepo
+      .createQueryBuilder()
+      .delete()
+      .from(PortfolioSnapshot)
+      .where('portfolio_id = :portfolioId', { portfolioId })
+      .execute();
+
+    return {
+      message: 'All portfolio snapshots deleted successfully',
+      deletedCount: result.affected || 0
     };
   }
 }
