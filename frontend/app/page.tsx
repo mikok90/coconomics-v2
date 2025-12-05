@@ -4,6 +4,10 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useAuth } from './auth-context';
 import { useRouter } from 'next/navigation';
+import LoadingSpinner from './components/LoadingSpinner';
+import PortfolioPerformanceChart from './components/PortfolioPerformanceChart';
+import SectorAllocationChart from './components/SectorAllocationChart';
+import TransactionHistory from './components/TransactionHistory';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
@@ -533,6 +537,16 @@ export default function PortfolioPage() {
             </button>
           </div>
         </div>
+      </div>
+
+      {/* Portfolio Performance Chart */}
+      <div className="px-6 pb-6">
+        <PortfolioPerformanceChart token={token} />
+      </div>
+
+      {/* Sector Allocation Chart */}
+      <div className="px-6 pb-6">
+        <SectorAllocationChart token={token} />
       </div>
 
       {/* Action Buttons */}
