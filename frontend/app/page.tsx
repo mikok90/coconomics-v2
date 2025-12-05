@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import LoadingSpinner, { FullPageLoader, InlineLoader } from './components/LoadingSpinner';
 import TransactionHistory from './components/TransactionHistory';
 import PortfolioPerformanceChart from './components/PortfolioPerformanceChart';
+import SectorAllocationChart from './components/SectorAllocationChart';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
@@ -86,12 +87,15 @@ export default function PortfolioPage() {
   const [sellQuantity, setSellQuantity] = useState('');
 
   useEffect(() => {
-    loadPortfolio();
-    const interval = setInterval(() => {
-      updateLivePrices();
-    }, 30000);
-    return () => clearInterval(interval);
-  }, []);
+    // Only load portfolio if authenticated and token is available
+    if (isAuthenticated && token) {
+      loadPortfolio();
+      const interval = setInterval(() => {
+        updateLivePrices();
+      }, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [isAuthenticated, token]);
 
   useEffect(() => {
     if (positions.length > 0) {
@@ -380,6 +384,11 @@ export default function PortfolioPage() {
       {/* Portfolio Performance Chart */}
       <div className="px-6 pb-6">
         <PortfolioPerformanceChart token={token} />
+      </div>
+
+      {/* Sector Allocation Chart */}
+      <div className="px-6 pb-6">
+        <SectorAllocationChart token={token} />
       </div>
 
       {/* Action Buttons */}
