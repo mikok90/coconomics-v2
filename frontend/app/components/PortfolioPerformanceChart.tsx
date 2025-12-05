@@ -47,6 +47,18 @@ export default function PortfolioPerformanceChart({ token }: PortfolioPerformanc
     }
   };
 
+  const resetPerformance = async () => {
+    if (!confirm('Reset all performance data? This cannot be undone.')) return;
+    try {
+      await axios.delete(`${API_URL}/portfolio/me/performance`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      await loadPerformanceData();
+    } catch (error) {
+      console.error('Error resetting performance:', error);
+    }
+  };
+
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('el-GR', {
       style: 'currency',
@@ -113,6 +125,12 @@ export default function PortfolioPerformanceChart({ token }: PortfolioPerformanc
               {days === 7 ? '7D' : days === 30 ? '1M' : days === 90 ? '3M' : '1Y'}
             </button>
           ))}
+          <button
+            onClick={resetPerformance}
+            className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-transparent text-red-400 hover:text-red-300 hover:bg-red-500/10"
+          >
+            Reset
+          </button>
         </div>
       </div>
 
