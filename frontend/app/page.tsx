@@ -320,10 +320,23 @@ export default function PortfolioPage() {
       return;
     }
 
+    // Validate symbol format (1-5 letters)
+    const symbolPattern = /^[A-Z]{1,5}$/i;
+    if (!symbolPattern.test(newPosition.symbol.trim())) {
+      showAlert('Invalid Stock Symbol', 'Please enter a valid stock symbol (1-5 letters)', 'error');
+      return;
+    }
+
+    // Validate positive numbers
+    if (parseFloat(newPosition.quantity) <= 0 || parseFloat(newPosition.avgBuyPrice) <= 0) {
+      showAlert('Invalid Values', 'Quantity and price must be greater than zero', 'error');
+      return;
+    }
+
     setLoading(true);
     try {
       await axios.post(`${API_URL}/portfolio/me/add-position`, {
-        symbol: newPosition.symbol.toUpperCase(),
+        symbol: newPosition.symbol.toUpperCase().trim(),
         quantity: parseFloat(newPosition.quantity),
         avgBuyPrice: parseFloat(newPosition.avgBuyPrice)
       }, getAuthHeaders());
@@ -331,10 +344,21 @@ export default function PortfolioPage() {
       setNewPosition({ symbol: '', quantity: '', avgBuyPrice: '' });
       setShowAddPosition(false);
       await loadPortfolio();
+      showAlert('Success', `${newPosition.symbol.toUpperCase()} added successfully!`, 'success');
     } catch (error: any) {
       console.error('Error adding position:', error);
-      const errorMessage = error.response?.data?.message || error.message || 'Error adding position';
-      showAlert('Error', errorMessage, 'error');
+
+      // Provide specific error message for invalid stock symbols
+      let errorMessage = 'Error adding position';
+      if (error.response?.status === 404 || error.message?.includes('not found')) {
+        errorMessage = `Invalid stock symbol "${newPosition.symbol.toUpperCase()}". Please verify the symbol and try again.`;
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+
+      showAlert('Invalid Stock', errorMessage, 'error');
     } finally {
       setLoading(false);
     }
@@ -539,6 +563,16 @@ export default function PortfolioPage() {
         </div>
       </div>
 
+      {/* Add Stock Button */}
+      <div className="px-6 pb-6">
+        <button
+          onClick={() => setShowAddPosition(true)}
+          className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 rounded-2xl p-4 font-semibold shadow-lg transition-all duration-200"
+        >
+          + Add Stock
+        </button>
+      </div>
+
       {/* Portfolio Performance Chart */}
       <div className="px-6 pb-6">
         <PortfolioPerformanceChart token={token} />
@@ -547,16 +581,6 @@ export default function PortfolioPage() {
       {/* Sector Allocation Chart */}
       <div className="px-6 pb-6">
         <SectorAllocationChart token={token} />
-      </div>
-
-      {/* Action Buttons */}
-      <div className="px-6 pb-6">
-        <button
-          onClick={() => setShowAddPosition(true)}
-          className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 rounded-2xl p-4 font-semibold shadow-lg transition-all duration-200"
-        >
-          + Add Stock
-        </button>
       </div>
 
       {/* Positions List */}

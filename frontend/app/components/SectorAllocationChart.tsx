@@ -18,7 +18,14 @@ interface SectorData {
 
 // Color palette for sectors
 const SECTOR_COLORS: Record<string, string> = {
-  'Technology': '#3b82f6',
+  // Technology subsectors
+  'Semiconductors': '#3b82f6',
+  'Cloud Infrastructure': '#06b6d4',
+  'AI & Quantum': '#8b5cf6',
+  'Software & SaaS': '#0ea5e9',
+  'Hardware & Devices': '#1d4ed8',
+  'E-Commerce & Digital': '#2563eb',
+  // Other sectors
   'Healthcare': '#10b981',
   'Finance': '#f59e0b',
   'Consumer': '#ec4899',
@@ -34,18 +41,42 @@ const SECTOR_COLORS: Record<string, string> = {
 const getSectorFromSymbol = (symbol: string): string => {
   // Comprehensive sector mapping for 500+ stocks
   const sectorMap: Record<string, string> = {
-    // Technology - FAANG, Semiconductors, Software, Hardware
-    'AAPL': 'Technology', 'MSFT': 'Technology', 'GOOGL': 'Technology', 'GOOG': 'Technology',
-    'META': 'Technology', 'NVDA': 'Technology', 'AMD': 'Technology', 'INTC': 'Technology',
-    'QCOM': 'Technology', 'AVGO': 'Technology', 'TXN': 'Technology', 'ADI': 'Technology',
-    'NFLX': 'Technology', 'CSCO': 'Technology', 'ORCL': 'Technology', 'ADBE': 'Technology',
-    'CRM': 'Technology', 'ACN': 'Technology', 'IBM': 'Technology', 'INTU': 'Technology',
-    'NOW': 'Technology', 'UBER': 'Technology', 'SHOP': 'Technology', 'SQ': 'Technology',
-    'PYPL': 'Technology', 'SNOW': 'Technology', 'TEAM': 'Technology', 'ZM': 'Technology',
-    'DOCU': 'Technology', 'DDOG': 'Technology', 'CRWD': 'Technology', 'NET': 'Technology',
-    'MU': 'Technology', 'AMAT': 'Technology', 'LRCX': 'Technology', 'KLAC': 'Technology',
-    'MRVL': 'Technology', 'ASML': 'Technology', 'TSM': 'Technology', 'SPOT': 'Technology',
-    'RBLX': 'Technology', 'U': 'Technology', 'PLTR': 'Technology', 'PANW': 'Technology',
+    // Semiconductors - Chip makers, foundries, equipment
+    'NVDA': 'Semiconductors', 'AMD': 'Semiconductors', 'INTC': 'Semiconductors',
+    'QCOM': 'Semiconductors', 'AVGO': 'Semiconductors', 'TXN': 'Semiconductors',
+    'ADI': 'Semiconductors', 'MU': 'Semiconductors', 'AMAT': 'Semiconductors',
+    'LRCX': 'Semiconductors', 'KLAC': 'Semiconductors', 'MRVL': 'Semiconductors',
+    'ASML': 'Semiconductors', 'TSM': 'Semiconductors', 'ON': 'Semiconductors',
+    'NXPI': 'Semiconductors', 'MCHP': 'Semiconductors', 'SWKS': 'Semiconductors',
+
+    // Cloud Infrastructure - Cloud, data centers, networking
+    'MSFT': 'Cloud Infrastructure', 'GOOGL': 'Cloud Infrastructure', 'GOOG': 'Cloud Infrastructure',
+    'ORCL': 'Cloud Infrastructure', 'IBM': 'Cloud Infrastructure', 'CSCO': 'Cloud Infrastructure',
+    'NET': 'Cloud Infrastructure', 'SNOW': 'Cloud Infrastructure', 'DDOG': 'Cloud Infrastructure',
+    'MDB': 'Cloud Infrastructure', 'ESTC': 'Cloud Infrastructure',
+
+    // AI & Quantum - AI, machine learning, quantum computing, data analytics
+    'PLTR': 'AI & Quantum', 'AI': 'AI & Quantum', 'PATH': 'AI & Quantum',
+    'IONQ': 'AI & Quantum', 'RGTI': 'AI & Quantum', 'SPLK': 'AI & Quantum',
+
+    // Software & SaaS - Enterprise software, security, collaboration
+    'CRM': 'Software & SaaS', 'ADBE': 'Software & SaaS', 'NOW': 'Software & SaaS',
+    'INTU': 'Software & SaaS', 'TEAM': 'Software & SaaS', 'ZM': 'Software & SaaS',
+    'DOCU': 'Software & SaaS', 'CRWD': 'Software & SaaS', 'PANW': 'Software & SaaS',
+    'ZS': 'Software & SaaS', 'OKTA': 'Software & SaaS', 'WDAY': 'Software & SaaS',
+    'VEEV': 'Software & SaaS', 'ANSS': 'Software & SaaS', 'CDNS': 'Software & SaaS',
+    'SNPS': 'Software & SaaS', 'ACN': 'Software & SaaS',
+
+    // Hardware & Devices - Consumer electronics, devices
+    'AAPL': 'Hardware & Devices', 'HPQ': 'Hardware & Devices', 'DELL': 'Hardware & Devices',
+    'SONY': 'Hardware & Devices', 'LOGI': 'Hardware & Devices',
+
+    // E-Commerce & Digital - Online platforms, streaming, rideshare
+    'AMZN': 'E-Commerce & Digital', 'META': 'E-Commerce & Digital', 'NFLX': 'E-Commerce & Digital',
+    'UBER': 'E-Commerce & Digital', 'SHOP': 'E-Commerce & Digital', 'SQ': 'E-Commerce & Digital',
+    'PYPL': 'E-Commerce & Digital', 'SPOT': 'E-Commerce & Digital', 'RBLX': 'E-Commerce & Digital',
+    'U': 'E-Commerce & Digital', 'DASH': 'E-Commerce & Digital', 'ABNB': 'E-Commerce & Digital',
+    'ETSY': 'E-Commerce & Digital', 'EBAY': 'E-Commerce & Digital',
 
     // Healthcare - Pharma, Biotech, Devices
     'JNJ': 'Healthcare', 'UNH': 'Healthcare', 'PFE': 'Healthcare', 'ABBV': 'Healthcare',
@@ -65,15 +96,15 @@ const getSectorFromSymbol = (symbol: string): string => {
     'PGR': 'Finance', 'TRV': 'Finance', 'ALL': 'Finance', 'MET': 'Finance', 'PRU': 'Finance',
     'AIG': 'Finance', 'HIG': 'Finance', 'AFL': 'Finance', 'COIN': 'Finance', 'HOOD': 'Finance',
 
-    // Consumer - Retail, Restaurants, Discretionary, Staples
-    'AMZN': 'Consumer', 'TSLA': 'Consumer', 'WMT': 'Consumer', 'HD': 'Consumer', 'MCD': 'Consumer',
+    // Consumer - Retail, Restaurants, Discretionary, Staples (excluding tech companies moved to E-Commerce)
+    'WMT': 'Consumer', 'HD': 'Consumer', 'MCD': 'Consumer',
     'NKE': 'Consumer', 'SBUX': 'Consumer', 'TGT': 'Consumer', 'LOW': 'Consumer', 'COST': 'Consumer',
     'TJX': 'Consumer', 'DG': 'Consumer', 'ROST': 'Consumer', 'BBY': 'Consumer', 'YUM': 'Consumer',
     'PG': 'Consumer', 'KO': 'Consumer', 'PEP': 'Consumer', 'PM': 'Consumer', 'MO': 'Consumer',
     'CL': 'Consumer', 'KMB': 'Consumer', 'GIS': 'Consumer', 'K': 'Consumer', 'HSY': 'Consumer',
     'MDLZ': 'Consumer', 'STZ': 'Consumer', 'TAP': 'Consumer', 'GM': 'Consumer', 'F': 'Consumer',
     'RACE': 'Consumer', 'LCID': 'Consumer', 'RIVN': 'Consumer', 'NIO': 'Consumer', 'XPEV': 'Consumer',
-    'LI': 'Consumer', 'BABA': 'Consumer',
+    'LI': 'Consumer',
 
     // Energy - Oil, Gas, Renewables
     'XOM': 'Energy', 'CVX': 'Energy', 'COP': 'Energy', 'SLB': 'Energy', 'EOG': 'Energy',
