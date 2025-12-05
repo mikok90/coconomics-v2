@@ -98,21 +98,15 @@ export class PortfolioService {
     let asset = await this.assetRepo.findOne({ where: { symbol: data.symbol } });
 
     if (!asset) {
-      // Fetch live quote to get asset name
-      try {
-        const quote = await this.stockPriceService.getQuote(data.symbol);
-        asset = this.assetRepo.create({
-          symbol: data.symbol,
-          name: data.symbol,
-          assetType: 'stock'
-        });
-      } catch (error) {
-        asset = this.assetRepo.create({
-          symbol: data.symbol,
-          name: data.symbol,
-          assetType: 'stock'
-        });
-      }
+      // Validate stock symbol exists by fetching live quote
+      // This will throw an error if the symbol is invalid
+      const quote = await this.stockPriceService.getQuote(data.symbol);
+
+      asset = this.assetRepo.create({
+        symbol: data.symbol,
+        name: data.symbol,
+        assetType: 'stock'
+      });
       await this.assetRepo.save(asset);
     }
 
@@ -178,6 +172,9 @@ export class PortfolioService {
       data.avgBuyPrice,
       `Bought ${data.quantity} shares of ${data.symbol} at $${data.avgBuyPrice.toFixed(2)}`
     );
+
+    // Create snapshot for performance tracking
+    await this.createSnapshot(portfolioId);
 
     // Return position with asset info
     return this.positionRepo.findOne({
@@ -266,6 +263,9 @@ export class PortfolioService {
       await this.positionRepo.delete(positionId);
       await this.updatePortfolioWeights(portfolioId);
 
+      // Create snapshot for performance tracking
+      await this.createSnapshot(portfolioId);
+
       return {
         message: `All shares sold successfully. Position removed from portfolio. Proceeds: $${proceeds.toFixed(2)}`,
         position: null,
@@ -280,6 +280,9 @@ export class PortfolioService {
 
     await this.positionRepo.save(position);
     await this.updatePortfolioWeights(portfolioId);
+
+    // Create snapshot for performance tracking
+    await this.createSnapshot(portfolioId);
 
     return {
       message: `Shares sold successfully. Proceeds: $${proceeds.toFixed(2)}`,
@@ -665,6 +668,9 @@ export class PortfolioService {
 
     await this.recordTransaction(portfolioId, 'DEPOSIT', amount, newCash, null, null, null, notes);
 
+    // Create snapshot for performance tracking
+    await this.createSnapshot(portfolioId);
+
     return {
       success: true,
       cashBalance: newCash,
@@ -702,6 +708,9 @@ export class PortfolioService {
     await this.portfolioRepo.save(portfolio);
 
     await this.recordTransaction(portfolioId, 'WITHDRAWAL', amount, newCash, null, null, null, notes);
+
+    // Create snapshot for performance tracking
+    await this.createSnapshot(portfolioId);
 
     return {
       success: true,

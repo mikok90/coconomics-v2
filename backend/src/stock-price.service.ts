@@ -45,6 +45,12 @@ export class StockPriceService {
       // Finnhub response: {c: current, pc: previous close, h: high, l: low, o: open, t: timestamp}
       const currentPrice = data.c;
       const previousClose = data.pc;
+
+      // Validate that the stock symbol exists (Finnhub returns 0 for invalid symbols)
+      if (!currentPrice || currentPrice === 0 || !previousClose || previousClose === 0) {
+        throw new Error(`Invalid stock symbol: ${symbol}`);
+      }
+
       const change = currentPrice - previousClose;
       const changePercent = (change / previousClose) * 100;
 
