@@ -392,8 +392,8 @@ export default function PortfolioPage() {
 
   const deletePosition = (positionId: number) => {
     showConfirm(
-      'Remove Position',
-      'Remove this position from portfolio?',
+      'Remove Stock',
+      'Are you sure you want to remove this stock?',
       async () => {
         try {
           await axios.delete(`${API_URL}/portfolio/position/${positionId}`, getAuthHeaders());
@@ -1381,7 +1381,7 @@ export default function PortfolioPage() {
                 onClick={() => setConfirmModal({ ...confirmModal, show: false })}
                 className="flex-1 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl py-4 font-medium transition-all"
               >
-                Cancel
+                No
               </button>
               <button
                 onClick={() => {
@@ -1390,7 +1390,7 @@ export default function PortfolioPage() {
                 }}
                 className="flex-1 bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 rounded-2xl py-4 font-semibold transition-all"
               >
-                Confirm
+                Yes
               </button>
             </div>
           </div>

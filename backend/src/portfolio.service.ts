@@ -169,8 +169,13 @@ export class PortfolioService {
       `Bought ${data.quantity} shares of ${data.symbol} at $${data.avgBuyPrice.toFixed(2)}`
     );
 
-    // Create snapshot for performance tracking
-    await this.createSnapshot(portfolioId);
+    // Create snapshot for performance tracking (don't fail the operation if this fails)
+    try {
+      await this.createSnapshot(portfolioId);
+    } catch (error) {
+      console.error('Failed to create snapshot after adding position:', error);
+      // Don't throw - snapshot creation shouldn't fail the stock purchase
+    }
 
     // Return position with asset info
     return this.positionRepo.findOne({
@@ -208,7 +213,12 @@ export class PortfolioService {
     await this.updatePortfolioWeights(portfolioId);
 
     // Update portfolio value snapshot (but don't record a transaction - leaves no trace)
-    await this.createSnapshot(portfolioId);
+    try {
+      await this.createSnapshot(portfolioId);
+    } catch (error) {
+      console.error('Failed to create snapshot after deleting position:', error);
+      // Don't throw - snapshot creation shouldn't fail the deletion
+    }
 
     return {
       message: 'Position deleted successfully',
@@ -278,7 +288,12 @@ export class PortfolioService {
       await this.updatePortfolioWeights(portfolioId);
 
       // Create snapshot for performance tracking
-      await this.createSnapshot(portfolioId);
+      try {
+        await this.createSnapshot(portfolioId);
+      } catch (error) {
+        console.error('Failed to create snapshot after selling all shares:', error);
+        // Don't throw - snapshot creation shouldn't fail the sale
+      }
 
       return {
         message: `All shares sold successfully. Position removed from portfolio. Proceeds: $${proceeds.toFixed(2)}`,
@@ -296,7 +311,12 @@ export class PortfolioService {
     await this.updatePortfolioWeights(portfolioId);
 
     // Create snapshot for performance tracking
-    await this.createSnapshot(portfolioId);
+    try {
+      await this.createSnapshot(portfolioId);
+    } catch (error) {
+      console.error('Failed to create snapshot after selling partial shares:', error);
+      // Don't throw - snapshot creation shouldn't fail the sale
+    }
 
     return {
       message: `Shares sold successfully. Proceeds: $${proceeds.toFixed(2)}`,
@@ -683,7 +703,12 @@ export class PortfolioService {
     await this.recordTransaction(portfolioId, 'DEPOSIT', amount, newCash, null, null, null, notes);
 
     // Create snapshot for performance tracking
-    await this.createSnapshot(portfolioId);
+    try {
+      await this.createSnapshot(portfolioId);
+    } catch (error) {
+      console.error('Failed to create snapshot after deposit:', error);
+      // Don't throw - snapshot creation shouldn't fail the deposit
+    }
 
     return {
       success: true,
@@ -724,7 +749,12 @@ export class PortfolioService {
     await this.recordTransaction(portfolioId, 'WITHDRAWAL', amount, newCash, null, null, null, notes);
 
     // Create snapshot for performance tracking
-    await this.createSnapshot(portfolioId);
+    try {
+      await this.createSnapshot(portfolioId);
+    } catch (error) {
+      console.error('Failed to create snapshot after withdrawal:', error);
+      // Don't throw - snapshot creation shouldn't fail the withdrawal
+    }
 
     return {
       success: true,
