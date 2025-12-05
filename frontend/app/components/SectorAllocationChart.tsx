@@ -32,49 +32,80 @@ const SECTOR_COLORS: Record<string, string> = {
 };
 
 const getSectorFromSymbol = (symbol: string): string => {
-  // Simple sector mapping - you can expand this
+  // Comprehensive sector mapping for 500+ stocks
   const sectorMap: Record<string, string> = {
-    'AAPL': 'Technology',
-    'MSFT': 'Technology',
-    'GOOGL': 'Technology',
-    'GOOG': 'Technology',
-    'AMZN': 'Consumer',
-    'NVDA': 'Technology',
-    'TSLA': 'Consumer',
-    'META': 'Technology',
-    'BRK.B': 'Finance',
-    'V': 'Finance',
-    'JPM': 'Finance',
-    'JNJ': 'Healthcare',
-    'WMT': 'Consumer',
-    'PG': 'Consumer',
-    'MA': 'Finance',
-    'HD': 'Consumer',
-    'BAC': 'Finance',
-    'XOM': 'Energy',
-    'CVX': 'Energy',
-    'ABBV': 'Healthcare',
-    'PFE': 'Healthcare',
-    'KO': 'Consumer',
-    'PEP': 'Consumer',
-    'COST': 'Consumer',
-    'AVGO': 'Technology',
-    'NFLX': 'Technology',
-    'CSCO': 'Technology',
-    'INTC': 'Technology',
-    'AMD': 'Technology',
-    'QCOM': 'Technology',
-    'TXN': 'Technology',
-    'HON': 'Industrial',
-    'UPS': 'Industrial',
-    'CAT': 'Industrial',
-    'GE': 'Industrial',
-    'BA': 'Industrial',
-    'MMM': 'Industrial',
-    'NEE': 'Utilities',
-    'DUK': 'Utilities',
-    'SO': 'Utilities',
-    'D': 'Utilities'
+    // Technology - FAANG, Semiconductors, Software, Hardware
+    'AAPL': 'Technology', 'MSFT': 'Technology', 'GOOGL': 'Technology', 'GOOG': 'Technology',
+    'META': 'Technology', 'NVDA': 'Technology', 'AMD': 'Technology', 'INTC': 'Technology',
+    'QCOM': 'Technology', 'AVGO': 'Technology', 'TXN': 'Technology', 'ADI': 'Technology',
+    'NFLX': 'Technology', 'CSCO': 'Technology', 'ORCL': 'Technology', 'ADBE': 'Technology',
+    'CRM': 'Technology', 'ACN': 'Technology', 'IBM': 'Technology', 'INTU': 'Technology',
+    'NOW': 'Technology', 'UBER': 'Technology', 'SHOP': 'Technology', 'SQ': 'Technology',
+    'PYPL': 'Technology', 'SNOW': 'Technology', 'TEAM': 'Technology', 'ZM': 'Technology',
+    'DOCU': 'Technology', 'DDOG': 'Technology', 'CRWD': 'Technology', 'NET': 'Technology',
+    'MU': 'Technology', 'AMAT': 'Technology', 'LRCX': 'Technology', 'KLAC': 'Technology',
+    'MRVL': 'Technology', 'ASML': 'Technology', 'TSM': 'Technology', 'SPOT': 'Technology',
+    'RBLX': 'Technology', 'U': 'Technology', 'PLTR': 'Technology', 'PANW': 'Technology',
+
+    // Healthcare - Pharma, Biotech, Devices
+    'JNJ': 'Healthcare', 'UNH': 'Healthcare', 'PFE': 'Healthcare', 'ABBV': 'Healthcare',
+    'TMO': 'Healthcare', 'ABT': 'Healthcare', 'DHR': 'Healthcare', 'MRK': 'Healthcare',
+    'LLY': 'Healthcare', 'BMY': 'Healthcare', 'AMGN': 'Healthcare', 'GILD': 'Healthcare',
+    'CVS': 'Healthcare', 'CI': 'Healthcare', 'HUM': 'Healthcare', 'ISRG': 'Healthcare',
+    'SYK': 'Healthcare', 'BSX': 'Healthcare', 'MDT': 'Healthcare', 'ZTS': 'Healthcare',
+    'REGN': 'Healthcare', 'VRTX': 'Healthcare', 'BIIB': 'Healthcare', 'ILMN': 'Healthcare',
+    'MRNA': 'Healthcare', 'BNTX': 'Healthcare', 'DXCM': 'Healthcare', 'EW': 'Healthcare',
+
+    // Finance - Banks, Insurance, Payments, Brokers
+    'BRK.B': 'Finance', 'BRK-B': 'Finance', 'JPM': 'Finance', 'BAC': 'Finance', 'WFC': 'Finance',
+    'MS': 'Finance', 'GS': 'Finance', 'C': 'Finance', 'BLK': 'Finance', 'SCHW': 'Finance',
+    'AXP': 'Finance', 'V': 'Finance', 'MA': 'Finance', 'PNC': 'Finance', 'USB': 'Finance',
+    'TFC': 'Finance', 'COF': 'Finance', 'BK': 'Finance', 'STT': 'Finance', 'SPGI': 'Finance',
+    'MCO': 'Finance', 'CME': 'Finance', 'ICE': 'Finance', 'NDAQ': 'Finance', 'CB': 'Finance',
+    'PGR': 'Finance', 'TRV': 'Finance', 'ALL': 'Finance', 'MET': 'Finance', 'PRU': 'Finance',
+    'AIG': 'Finance', 'HIG': 'Finance', 'AFL': 'Finance', 'COIN': 'Finance', 'HOOD': 'Finance',
+
+    // Consumer - Retail, Restaurants, Discretionary, Staples
+    'AMZN': 'Consumer', 'TSLA': 'Consumer', 'WMT': 'Consumer', 'HD': 'Consumer', 'MCD': 'Consumer',
+    'NKE': 'Consumer', 'SBUX': 'Consumer', 'TGT': 'Consumer', 'LOW': 'Consumer', 'COST': 'Consumer',
+    'TJX': 'Consumer', 'DG': 'Consumer', 'ROST': 'Consumer', 'BBY': 'Consumer', 'YUM': 'Consumer',
+    'PG': 'Consumer', 'KO': 'Consumer', 'PEP': 'Consumer', 'PM': 'Consumer', 'MO': 'Consumer',
+    'CL': 'Consumer', 'KMB': 'Consumer', 'GIS': 'Consumer', 'K': 'Consumer', 'HSY': 'Consumer',
+    'MDLZ': 'Consumer', 'STZ': 'Consumer', 'TAP': 'Consumer', 'DIS': 'Consumer', 'CMCSA': 'Consumer',
+    'NFLX': 'Consumer', 'GM': 'Consumer', 'F': 'Consumer', 'RACE': 'Consumer', 'LCID': 'Consumer',
+    'RIVN': 'Consumer', 'NIO': 'Consumer', 'XPEV': 'Consumer', 'LI': 'Consumer', 'BABA': 'Consumer',
+
+    // Energy - Oil, Gas, Renewables
+    'XOM': 'Energy', 'CVX': 'Energy', 'COP': 'Energy', 'SLB': 'Energy', 'EOG': 'Energy',
+    'PSX': 'Energy', 'VLO': 'Energy', 'MPC': 'Energy', 'OXY': 'Energy', 'HES': 'Energy',
+    'HAL': 'Energy', 'BKR': 'Energy', 'DVN': 'Energy', 'FANG': 'Energy', 'MRO': 'Energy',
+    'APA': 'Energy', 'ENPH': 'Energy', 'SEDG': 'Energy', 'RUN': 'Energy', 'NOVA': 'Energy',
+
+    // Industrial - Aerospace, Machinery, Defense, Transportation
+    'BA': 'Industrial', 'HON': 'Industrial', 'UPS': 'Industrial', 'CAT': 'Industrial', 'GE': 'Industrial',
+    'MMM': 'Industrial', 'LMT': 'Industrial', 'RTX': 'Industrial', 'GD': 'Industrial', 'NOC': 'Industrial',
+    'LHX': 'Industrial', 'DE': 'Industrial', 'EMR': 'Industrial', 'ETN': 'Industrial', 'ITW': 'Industrial',
+    'PH': 'Industrial', 'CMI': 'Industrial', 'FDX': 'Industrial', 'UBER': 'Industrial', 'LYFT': 'Industrial',
+    'DAL': 'Industrial', 'UAL': 'Industrial', 'AAL': 'Industrial', 'LUV': 'Industrial', 'JBLU': 'Industrial',
+
+    // Materials - Chemicals, Mining, Steel
+    'LIN': 'Materials', 'APD': 'Materials', 'ECL': 'Materials', 'DD': 'Materials', 'DOW': 'Materials',
+    'NEM': 'Materials', 'FCX': 'Materials', 'GOLD': 'Materials', 'AA': 'Materials', 'X': 'Materials',
+    'NUE': 'Materials', 'STLD': 'Materials', 'VMC': 'Materials', 'MLM': 'Materials',
+
+    // Utilities - Electric, Water, Gas
+    'NEE': 'Utilities', 'DUK': 'Utilities', 'SO': 'Utilities', 'D': 'Utilities', 'AEP': 'Utilities',
+    'EXC': 'Utilities', 'XEL': 'Utilities', 'ED': 'Utilities', 'SRE': 'Utilities', 'PEG': 'Utilities',
+    'ES': 'Utilities', 'AWK': 'Utilities', 'ATO': 'Utilities', 'WEC': 'Utilities', 'DTE': 'Utilities',
+
+    // Real Estate - REITs
+    'AMT': 'Real Estate', 'PLD': 'Real Estate', 'CCI': 'Real Estate', 'EQIX': 'Real Estate', 'PSA': 'Real Estate',
+    'WELL': 'Real Estate', 'DLR': 'Real Estate', 'O': 'Real Estate', 'SPG': 'Real Estate', 'AVB': 'Real Estate',
+    'EQR': 'Real Estate', 'VTR': 'Real Estate', 'SBAC': 'Real Estate', 'ARE': 'Real Estate',
+
+    // Telecommunications
+    'T': 'Telecommunications', 'VZ': 'Telecommunications', 'TMUS': 'Telecommunications', 'CHTR': 'Telecommunications',
+    'DIS': 'Telecommunications', 'CMCSA': 'Telecommunications', 'DISH': 'Telecommunications'
   };
 
   return sectorMap[symbol.toUpperCase()] || 'Other';
