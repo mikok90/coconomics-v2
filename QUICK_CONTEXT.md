@@ -100,6 +100,8 @@
 ### Current Session Fixes (Dec 6)
 - `backend/src/app.module.ts` - Added PortfolioSnapshot entity registration (CRITICAL FIX)
 - `backend/src/portfolio.controller.ts` - Fixed Rule of 40 response format (snake_case → camelCase)
+- `backend/src/portfolio.service.ts` - Fixed deletePosition to NOT refund money, fixed performance data format
+- `frontend/app/components/PortfolioPerformanceChart.tsx` - Fixed profit/loss calculation logic
 
 ## Current Deployment Status
 
@@ -131,6 +133,20 @@
 3. ✅ **Delete Confirmation Message**
    - **Previous:** Generic "Remove Position" with "Cancel/Confirm" buttons
    - **Now:** "Are you sure you want to remove this stock?" with "No/Yes" buttons
+
+4. ✅ **Remove Button Refunding Money (WRONG)**
+   - **Problem:** Clicking "Remove" was adding money back to cash balance
+   - **User Expectation:** Remove = forget completely, NO money back (money was already spent)
+   - **Fix:** Removed refund logic from deletePosition() - now just deletes position
+   - **Result:** Remove = no trace, no refund. Sell = get current market value as cash
+
+5. ✅ **Portfolio Performance Showing Wrong Profit/Loss**
+   - **Problem:** Chart compared first snapshot to last snapshot (wrong!)
+   - **Example:** Deposit $1000, buy stocks, deposit another $1000 → shows +$1000 profit (wrong)
+   - **Fix:** Calculate actual P/L = Current Value - (Total Deposits - Total Withdrawals)
+   - **Backend:** Modified getPerformanceData to return totalDeposits and totalWithdrawals
+   - **Frontend:** Fixed calculateChange to use correct formula
+   - **Result:** Chart now shows ACTUAL profit/loss, accounting for all deposits/withdrawals
 
 ## Next Session Tasks
 1. ✅ DONE: Fixed Render deployment (created new service)

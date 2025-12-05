@@ -185,7 +185,9 @@ export class PortfolioService {
   }
 
   /**
-   * Delete a position
+   * Delete a position - removes stock completely without refunding money
+   * This is for mistakes/errors - the money was already spent and is lost
+   * Use sellShares() to get money back at current market price
    */
   async deletePosition(positionId: number) {
     const position = await this.positionRepo.findOne({
@@ -199,20 +201,12 @@ export class PortfolioService {
 
     const portfolioId = position.portfolioId;
 
-    // Refund the cost of the position back to cash (like it was never purchased)
-    const portfolio = await this.portfolioRepo.findOne({ where: { id: portfolioId } });
-    if (portfolio) {
-      const totalCost = parseFloat(position.quantity.toString()) * parseFloat(position.avgBuyPrice.toString());
-      const currentCash = parseFloat(portfolio.cashBalance.toString());
-      portfolio.cashBalance = currentCash + totalCost; // Refund the money
-      await this.portfolioRepo.save(portfolio);
-    }
-
-    // Delete the position completely (no trace)
+    // NO REFUND - money stays gone (user made a mistake, cash was already spent)
+    // Delete the position completely (no trace, no transaction record)
     await this.positionRepo.delete(positionId);
     await this.updatePortfolioWeights(portfolioId);
 
-    // Update portfolio value snapshot (but don't record a transaction - leaves no trace)
+    // Update portfolio value snapshot to reflect the removal
     try {
       await this.createSnapshot(portfolioId);
     } catch (error) {
@@ -221,8 +215,9 @@ export class PortfolioService {
     }
 
     return {
-      message: 'Position deleted successfully',
-      refundAmount: parseFloat(position.quantity.toString()) * parseFloat(position.avgBuyPrice.toString())
+      message: 'Position removed successfully - no refund (use Sell to get money back)',
+      removedSymbol: position.asset.symbol,
+      removedQuantity: parseFloat(position.quantity.toString())
     };
   }
 
@@ -823,6 +818,7 @@ export class PortfolioService {
 
   /**
    * Get portfolio performance data (value over time)
+   * Includes total deposits/withdrawals for accurate profit/loss calculation
    */
   async getPerformanceData(portfolioId: number, days: number = 30) {
     const startDate = new Date();
@@ -835,11 +831,18 @@ export class PortfolioService {
       .orderBy('snapshot.snapshot_date', 'ASC')
       .getMany();
 
-    return snapshots.map(snapshot => ({
-      date: snapshot.snapshotDate,
-      totalValue: parseFloat(snapshot.totalValue.toString()),
-      cashBalance: parseFloat(snapshot.cashBalance.toString()),
-      positionsValue: parseFloat(snapshot.positionsValue.toString())
-    }));
+    // Get portfolio info for deposits/withdrawals
+    const portfolio = await this.portfolioRepo.findOne({ where: { id: portfolioId } });
+
+    return {
+      snapshots: snapshots.map(snapshot => ({
+        date: snapshot.snapshotDate,
+        totalValue: parseFloat(snapshot.totalValue.toString()),
+        cashBalance: parseFloat(snapshot.cashBalance.toString()),
+        positionsValue: parseFloat(snapshot.positionsValue.toString())
+      })),
+      totalDeposits: portfolio ? parseFloat(portfolio.totalDeposits.toString()) : 0,
+      totalWithdrawals: portfolio ? parseFloat(portfolio.totalWithdrawals.toString()) : 0
+    };
   }
 }

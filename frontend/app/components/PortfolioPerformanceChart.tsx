@@ -20,6 +20,8 @@ interface PortfolioPerformanceChartProps {
 
 export default function PortfolioPerformanceChart({ token }: PortfolioPerformanceChartProps) {
   const [performanceData, setPerformanceData] = useState<PerformanceData[]>([]);
+  const [totalDeposits, setTotalDeposits] = useState(0);
+  const [totalWithdrawals, setTotalWithdrawals] = useState(0);
   const [loading, setLoading] = useState(true);
   const [timeframe, setTimeframe] = useState(30);
 
@@ -34,7 +36,10 @@ export default function PortfolioPerformanceChart({ token }: PortfolioPerformanc
         headers: { Authorization: `Bearer ${token}` },
         params: { days: timeframe }
       });
-      setPerformanceData(response.data);
+      // Backend now returns { snapshots, totalDeposits, totalWithdrawals }
+      setPerformanceData(response.data.snapshots || response.data); // Backwards compatible
+      setTotalDeposits(response.data.totalDeposits || 0);
+      setTotalWithdrawals(response.data.totalWithdrawals || 0);
     } catch (error) {
       console.error('Error loading performance data:', error);
     } finally {
@@ -63,14 +68,16 @@ export default function PortfolioPerformanceChart({ token }: PortfolioPerformanc
   };
 
   const calculateChange = () => {
-    if (performanceData.length < 2) return { amount: 0, percentage: 0 };
+    if (performanceData.length === 0) return { amount: 0, percentage: 0 };
 
-    const firstValue = performanceData[0].totalValue;
-    const lastValue = performanceData[performanceData.length - 1].totalValue;
-    const change = lastValue - firstValue;
-    const percentage = (change / firstValue) * 100;
+    // CORRECT P/L calculation: Current Value - Net Deposits
+    // Net Deposits = Total Deposited - Total Withdrawn
+    const currentValue = performanceData[performanceData.length - 1].totalValue;
+    const netDeposits = totalDeposits - totalWithdrawals;
+    const actualProfitLoss = currentValue - netDeposits;
+    const percentage = netDeposits > 0 ? (actualProfitLoss / netDeposits) * 100 : 0;
 
-    return { amount: change, percentage };
+    return { amount: actualProfitLoss, percentage };
   };
 
   const change = calculateChange();
