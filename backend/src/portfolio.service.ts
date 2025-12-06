@@ -150,19 +150,16 @@ export class PortfolioService {
     await this.positionRepo.save(position);
     await this.updatePortfolioWeights(portfolioId);
 
-    // Record BUY transaction
+    // Record BUY transaction (cash balance does NOT change - only changes on SELL/DEPOSIT/WITHDRAW)
     const portfolio = await this.portfolioRepo.findOne({ where: { id: portfolioId } });
     const totalCost = data.quantity * data.avgBuyPrice;
     const currentCash = parseFloat(portfolio.cashBalance.toString());
-    const newCash = currentCash - totalCost;
-    portfolio.cashBalance = newCash;
-    await this.portfolioRepo.save(portfolio);
 
     await this.recordTransaction(
       portfolioId,
       'BUY',
       totalCost,
-      newCash,
+      currentCash, // Cash balance unchanged
       data.symbol,
       data.quantity,
       data.avgBuyPrice,
