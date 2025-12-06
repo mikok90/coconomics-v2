@@ -863,9 +863,11 @@ export class PortfolioService {
 
   /**
    * Delete all portfolio snapshots (reset performance data)
+   * Also resets totalDeposits and totalWithdrawals to prevent showing incorrect profit/loss
    * Use this to clear corrupted performance data and start fresh
    */
   async deleteAllSnapshots(portfolioId: number) {
+    // Delete all snapshots
     const result = await this.snapshotRepo
       .createQueryBuilder()
       .delete()
@@ -873,8 +875,17 @@ export class PortfolioService {
       .where('portfolio_id = :portfolioId', { portfolioId })
       .execute();
 
+    // Reset totalDeposits and totalWithdrawals to 0
+    // This prevents showing incorrect profit/loss from old data
+    const portfolio = await this.portfolioRepo.findOne({ where: { id: portfolioId } });
+    if (portfolio) {
+      portfolio.totalDeposits = 0;
+      portfolio.totalWithdrawals = 0;
+      await this.portfolioRepo.save(portfolio);
+    }
+
     return {
-      message: 'All portfolio snapshots deleted successfully',
+      message: 'All portfolio snapshots and profit/loss tracking reset successfully',
       deletedCount: result.affected || 0
     };
   }
