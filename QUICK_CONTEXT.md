@@ -106,6 +106,40 @@ Cash balance NEVER changes on:
 - **Display:** USD ($)
 - **Formatting:** `en-US` locale, no decimals for currency display
 
+## Database Entities (TypeORM)
+**CRITICAL:** ALL entities MUST be registered in `app.module.ts` entities array:
+```typescript
+entities: [User, Portfolio, Asset, Position, PriceHistory, RebalanceHistory,
+           OptimizationResult, Transaction, PortfolioSnapshot]
+```
+**Forgetting to register = "No metadata found" error**
+
+## API Response Format
+- **Backend:** Returns snake_case (revenue_growth_percent, profit_margin_percent)
+- **Frontend:** Expects camelCase (revenueGrowth, profitMargin)
+- **Solution:** Transform in controller before returning to frontend
+
+## Stock Validation
+- **Invalid stock:** Finnhub returns price = 0
+- **Check:** Throw error if `quote.price === 0` in `stock-price.service.ts`
+- **Message:** "Invalid stock symbol: {symbol}"
+
+## Common Bugs to Avoid
+1. **Forgetting entity registration** → Always update app.module.ts
+2. **Format mismatch** → Transform snake_case to camelCase in controllers
+3. **Cash balance logic** → Only change on SELL/DEPOSIT/WITHDRAW (NOT on BUY/REMOVE)
+4. **Cost basis tracking** → Update totalDeposits on DEPOSIT and REMOVE operations
+5. **Reset completeness** → Clear snapshots AND totalDeposits/totalWithdrawals
+
+## Testing Checklist Before Deploy
+- [ ] Backend compiles without errors
+- [ ] Frontend builds successfully
+- [ ] Cash balance only changes on SELL/DEPOSIT/WITHDRAW
+- [ ] P/L calculation: Current Value - (totalDeposits - totalWithdrawals)
+- [ ] All new entities registered in app.module.ts
+- [ ] Response format matches frontend expectations
+- [ ] Push to BOTH branches (main + master)
+
 ## Quick Links
 - Backend repo: https://github.com/mikok90/coconomics-v2
 - Vercel dashboard: https://vercel.com
