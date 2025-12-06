@@ -559,6 +559,21 @@ export default function PortfolioPage() {
             >
               History
             </button>
+            <button
+              onClick={async () => {
+                if (!confirm('Reset all performance data? This cannot be undone.')) return;
+                try {
+                  await axios.delete(`${API_URL}/portfolio/me/performance`, getAuthHeaders());
+                  alert('Performance data reset successfully');
+                } catch (error) {
+                  console.error('Error resetting performance:', error);
+                  alert('Failed to reset performance data');
+                }
+              }}
+              className="flex-1 bg-red-500/20 hover:bg-red-500/30 backdrop-blur-sm rounded-xl py-3 font-semibold transition-all text-red-300"
+            >
+              Reset Chart
+            </button>
           </div>
         </div>
       </div>
